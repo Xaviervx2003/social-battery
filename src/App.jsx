@@ -1,4 +1,12 @@
-import React, { useState, useRef } from 'react';
+import { 
+  auth, 
+  db, 
+  createUserProfile, 
+  updateBatteryLevel, 
+  sendFriendRequest,
+  listenToUserData,
+  listenToFriendsUpdates
+} from './firebaseConfig';import React, { useState, useRef } from 'react';
 import { 
   Battery, BatteryCharging, Zap, Coffee, Moon, Music, 
   MessageCircle, PhoneOff, Sun, Bell, Heart, User, 
