@@ -12,29 +12,22 @@ export default function BatterySlider({ batteryLevel, onChange }) {
     onChange(Math.round(percentage));
   };
 
-  const handlePointerDown = (e) => {
-    setIsDragging(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    updateBatteryFromPointer(e);
-  };
-
-  const handlePointerMove = (e) => {
-    if (isDragging) updateBatteryFromPointer(e);
-  };
-
-  const handlePointerUp = (e) => {
-    setIsDragging(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-  };
-
   return (
     <div
       ref={sliderRef}
       className="relative w-full h-14 bg-black/20 rounded-full p-1 mb-2 cursor-pointer touch-none select-none"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerDown={(e) => {
+        setIsDragging(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+        updateBatteryFromPointer(e);
+      }}
+      onPointerMove={(e) => {
+        if (isDragging) updateBatteryFromPointer(e);
+      }}
+      onPointerUp={(e) => {
+        setIsDragging(false);
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }}
     >
       <div className="w-full h-full rounded-full overflow-hidden relative">
         <div
