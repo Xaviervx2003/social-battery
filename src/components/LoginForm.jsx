@@ -1,87 +1,47 @@
-import React, { useState } from 'react';
-import { Mail, Lock, User, ArrowRight, Loader2, Zap } from 'lucide-react';
+// src/components/LoginForm.jsx
+import React, { useState } from "react";
+import { User, ArrowRight } from "lucide-react";
 
-export default function LoginForm({ onLogin, onRegister, isLoading, error }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: ''
-  });
+export default function LoginForm({ onSubmit }) {
+  const [name, setName] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isLogin) {
-      onLogin(formData.email, formData.password);
-    } else {
-      onRegister(formData.email, formData.password, formData.name);
+    if (name.trim()) {
+      onSubmit(name);
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
   return (
-    <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-100 relative overflow-hidden">
-      <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-50 rounded-full blur-3xl opacity-50"></div>
-      <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-50 rounded-full blur-3xl opacity-50"></div>
-
-      <div className="relative z-10">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-200 transform rotate-3 hover:rotate-6 transition-transform">
-            <Zap className="text-white w-8 h-8" fill="currentColor" />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-800">
-            {isLogin ? 'Bem-vindo de volta!' : 'Crie sua conta'}
-          </h2>
+    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm animate-in zoom-in duration-500">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 text-3xl">
+          ⚡
         </div>
-
-        {error && (
-          <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-center justify-center">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 ml-1">Nome</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" name="name" required={!isLogin} value={formData.name} onChange={handleChange} placeholder="Seu nome" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20" />
-              </div>
-            </div>
-          )}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 ml-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="email" name="email" required value={formData.email} onChange={handleChange} placeholder="seu@email.com" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 ml-1">Senha</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="password" name="password" required value={formData.password} onChange={handleChange} placeholder="••••••••" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-10 pr-4 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20" />
-            </div>
-          </div>
-
-          <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 mt-6">
-            {isLoading ? <Loader2 className="animate-spin" size={20} /> : (isLogin ? 'Entrar' : 'Criar Conta')}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-500">
-            {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
-            <button onClick={() => setIsLogin(!isLogin)} className="ml-2 font-bold text-indigo-600 hover:text-indigo-700 hover:underline">
-              {isLogin ? 'Cadastre-se' : 'Fazer Login'}
-            </button>
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold text-slate-800">Social Battery</h1>
+        <p className="text-slate-400 text-sm">Como está sua energia hoje?</p>
       </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative">
+          <User className="absolute left-4 top-3.5 text-slate-400" size={20} />
+          <input
+            type="text"
+            placeholder="Seu nome ou apelido"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-700 font-medium"
+            required
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 hover:scale-[1.02] active:scale-95 transition-all"
+        >
+          Entrar <ArrowRight size={18} />
+        </button>
+      </form>
     </div>
   );
 }

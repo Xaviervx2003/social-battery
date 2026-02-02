@@ -1,26 +1,21 @@
+// src/pages/LoginPage.jsx
 import React from "react";
-import LoginForm from "../components/LoginForm"; // Certifique-se que o LoginForm está na pasta components
+import { LoginForm } from "../components"; // Importação limpa (graças ao passo 1)
 
 export default function LoginPage({ setUser }) {
-  const handleLogin = (email, password) => {
-    // Simulação
-    setUser({ name: "Rafa", email });
-  };
-
-  const handleRegister = (email, password, name) => {
-    setUser({ name, email });
+  
+  const handleLogin = (userName) => {
+    // Cria o objeto do usuário
+    const userData = { name: userName, loginTime: new Date() };
+    
+    // Passa para o App.js (que vai salvar no localStorage)
+    setUser(userData);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <LoginForm
-          onLogin={handleLogin}
-          onRegister={handleRegister}
-          isLoading={false}
-          error={null}
-        />
-      </div>
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      {/* A página controla o layout, o componente controla o formulário */}
+      <LoginForm onSubmit={handleLogin} />
     </div>
   );
 }

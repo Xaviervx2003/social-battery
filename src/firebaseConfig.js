@@ -1,5 +1,6 @@
 ﻿import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore"; // <--- 1. Importar isso
 
 const firebaseConfig = {
   apiKey: "AIzaSyBTe413MwOlYvh7KXlNyEyYm6lEpHw2_dE",
@@ -12,9 +13,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Serviços
 const auth = getAuth(app);
+const db = getFirestore(app); // <--- 2. Inicializar o banco de dados
 const googleProvider = new GoogleAuthProvider();
 const githubProvider = new GithubAuthProvider();
 
-export { auth, googleProvider, githubProvider };
+// Exportações
+export { auth, db, googleProvider, githubProvider }; // <--- 3. Exportar o 'db'
 export default app;
