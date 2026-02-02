@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import LoginPage from "./pages/LoginPage";
 import HomePage from "./pages/HomePage";
-import { db } from "./firebaseConfig"; // Importe o banco
-import { doc, getDoc } from "firebase/firestore"; 
+import { db } from "./firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -13,7 +13,7 @@ export default function App() {
     if (saved) {
       const parsedUser = JSON.parse(saved);
       setUser(parsedUser);
-      fetchUserBattery(parsedUser.name); // Busca no Firebase ao abrir
+      fetchUserBattery(parsedUser.name);
     }
   }, []);
 
@@ -22,7 +22,7 @@ export default function App() {
       const docRef = doc(db, "users", userName);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setInitialBattery(docSnap.data().level);
+        setInitialBattery(docSnap.data().batteryLevel);
       }
     } catch (e) {
       console.error("Erro ao buscar bateria:", e);
@@ -35,12 +35,19 @@ export default function App() {
     fetchUserBattery(userData.name);
   };
 
+  // --- NOVA FUNÇÃO DE LOGOUT ---
+  const handleLogout = () => {
+    setUser(null); // Limpa o estado
+    localStorage.removeItem("socialBatteryUser"); // Limpa a memória do navegador
+  };
+
   return (
     <>
       {!user ? (
         <LoginPage setUser={handleSetUser} />
       ) : (
-        <HomePage user={user} initialLevel={initialBattery} />
+        // Passamos a função onLogout para a Home
+        <HomePage user={user} initialLevel={initialBattery} onLogout={handleLogout} />
       )}
     </>
   );
