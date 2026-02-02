@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "990994147026",
+    "project_id": "bateria-app",
+    "storage_bucket": "bateria-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:990994147026:android:114a318fb8a437bc7def0b",
+        "android_client_info": {
+          "package_name": "com.joao.socialbattery"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "990994147026-grnttkd1j4bc10rpbaprb9rd05hoplou.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDA6mIb1kUifqnrB21ZjkD-75Nt1D-h3pI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "990994147026-grnttkd1j4bc10rpbaprb9rd05hoplou.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
