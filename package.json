@@ -20,6 +20,7 @@
     "type": "module",
     "dependencies": {
         "@capacitor/android": "^8.0.2",
+        "@capacitor/core": "^8.0.2",
         "firebase": "^10.11.0",
         "lucide-react": "^0.309.0",
         "react": "^18.2.0",
