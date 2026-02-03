@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Bell, Clock, BatteryCharging, Cloud, Check, LogOut, Loader2, Hash, RefreshCw, MessageCircle, Ghost } from "lucide-react";
+import { Bell, Clock, BatteryCharging, Cloud, Check, LogOut, Loader2, Hash, RefreshCw, MessageCircle, Ghost, Sparkles } from "lucide-react";
 import NotificationsView from "./NotificationsView";
 import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -8,6 +8,7 @@ import { useBatterySync } from "../hooks/useBatterySync";
 import { BatterySlider, BottomMenu } from "../components";
 import FriendsView from "./FriendsView";
 import InsightsView from "./InsightsView";
+import { analyzeStatusSentiment } from "../utils/aiHelpers"; // <--- IMPORT DA IA
 
 export default function HomePage({ user, initialLevel, onLogout }) {
   const [activeTab, setActiveTab] = useState("home");
@@ -15,8 +16,11 @@ export default function HomePage({ user, initialLevel, onLogout }) {
   const [statusText, setStatusText] = useState(user?.status || "");
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   
-  // NOVO: Estado Ghost Mode
+  // Estado Ghost Mode
   const [isGhostMode, setIsGhostMode] = useState(user?.isGhostMode || false);
+  
+  // NOVO: Estado da Sugestão da IA
+  const [aiSuggestion, setAiSuggestion] = useState(null);
   
   const [rechargeTime, setRechargeTime] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -60,7 +64,6 @@ export default function HomePage({ user, initialLevel, onLogout }) {
       try {
           await updateDoc(doc(db, "users", user.uid), {
               isGhostMode: newValue,
-              // Se ativou, força o status para Congelado. Se desativou, limpa ou volta pro anterior.
               status: newValue ? "Congelado ❄️" : "" 
           });
           if (newValue) setStatusText("Congelado ❄️");
@@ -74,6 +77,18 @@ export default function HomePage({ user, initialLevel, onLogout }) {
   const handleStatusChange = (e) => {
     const text = e.target.value;
     setStatusText(text);
+
+    // --- CÉREBRO DA IA (NLP) ---
+    // Analisa o sentimento enquanto o usuário digita
+    const suggestion = analyzeStatusSentiment(text);
+    
+    // Se tiver sugestão E a diferença de bateria for relevante (>15%), mostra o botão
+    if (suggestion && Math.abs(suggestion.suggestedLevel - batteryLevel) > 15) {
+        setAiSuggestion(suggestion);
+    } else {
+        setAiSuggestion(null);
+    }
+
     setIsSavingStatus(true);
     if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
     statusTimeoutRef.current = setTimeout(async () => {
@@ -83,6 +98,17 @@ export default function HomePage({ user, initialLevel, onLogout }) {
             setIsSavingStatus(false);
         } catch (error) { setIsSavingStatus(false); }
     }, 1500);
+  };
+
+  // Função para aceitar a sugestão da IA
+  const applyAiSuggestion = () => {
+      if (!aiSuggestion) return;
+      setBatteryLevel(aiSuggestion.suggestedLevel);
+      // Adiciona o emoji sugerido ao texto se ele já não estiver lá
+      if (!statusText.includes(aiSuggestion.emoji)) {
+          setStatusText(prev => prev + " " + aiSuggestion.emoji);
+      }
+      setAiSuggestion(null); // Fecha o pop-up
   };
 
   const handleForceCreateTag = async () => {
@@ -200,7 +226,7 @@ export default function HomePage({ user, initialLevel, onLogout }) {
               </p>
             </div>
 
-            {/* STATUS / NOTES */}
+            {/* STATUS / NOTES COM SUGESTÃO IA */}
             <div className="relative mx-2">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                     <MessageCircle size={18} />
@@ -211,11 +237,25 @@ export default function HomePage({ user, initialLevel, onLogout }) {
                     placeholder="O que está acontecendo? (Ex: Estudando 📚)"
                     value={statusText}
                     onChange={handleStatusChange}
-                    disabled={isGhostMode} // Bloqueia digitação no modo fantasma
+                    disabled={isGhostMode} 
                     className={`w-full pl-12 pr-4 py-4 rounded-2xl shadow-sm border text-slate-700 placeholder:text-slate-400 focus:outline-indigo-500 transition-all text-sm font-medium
                         ${isGhostMode ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed' : 'bg-white border-slate-100'}
                     `}
                 />
+                
+                {/* --- BOTÃO MÁGICO DA IA (POP-UP) --- */}
+                {aiSuggestion && !isGhostMode && (
+                    <div className="absolute -top-12 left-0 right-0 flex justify-center animate-in slide-in-from-bottom-2 z-20">
+                        <button 
+                            onClick={applyAiSuggestion}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg shadow-indigo-200 text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95"
+                        >
+                            <Sparkles size={12} className="fill-yellow-400 text-yellow-400" />
+                            Mudar para {aiSuggestion.suggestedLevel}% {aiSuggestion.emoji}?
+                        </button>
+                    </div>
+                )}
+
                 {isSavingStatus && !isGhostMode && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
                         <Loader2 size={14} className="animate-spin text-indigo-500" />

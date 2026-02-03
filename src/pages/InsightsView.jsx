@@ -3,9 +3,10 @@ import {
   AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, YAxis, CartesianGrid 
 } from 'recharts';
-import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw, Sparkles, Brain } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw, Sparkles, Brain, AlertTriangle } from "lucide-react";
 import { db } from "../firebaseConfig";
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { predictBurnout } from "../utils/aiHelpers"; // <--- IMPORT DA IA DE BURNOUT
 
 export default function InsightsView({ currentUser }) {
   const [data, setData] = useState([]);
@@ -14,13 +15,14 @@ export default function InsightsView({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('week'); // 'day', 'week', 'month'
   const [vibeAnalysis, setVibeAnalysis] = useState({ text: "Carregando...", color: "text-slate-400" });
+  
+  // NOVO: Estado de Alerta de Burnout
+  const [burnoutAlert, setBurnoutAlert] = useState(null);
 
   const userId = currentUser?.uid || currentUser?.id;
   
-  // Paleta de Cores "Aesthetic"
   const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6'];
 
-  // --- O "CÉREBRO" DA GERAÇÃO Z ---
   const analyzeVibe = (avg) => {
       if (avg === 0) return { text: "Sem dados. Você existe? 👻", color: "text-slate-400" };
       if (avg < 20) return { text: "Modo Zumbi Ativado 🧟‍♂️ Vai dormir!", color: "text-red-500" };
@@ -41,7 +43,6 @@ export default function InsightsView({ currentUser }) {
       const now = new Date();
       let startDate = new Date();
 
-      // Ajuste de datas mais preciso
       if (timeRange === 'day') {
         startDate.setHours(0, 0, 0, 0);
       } else if (timeRange === 'week') {
@@ -72,7 +73,6 @@ export default function InsightsView({ currentUser }) {
         const date = item.timestamp.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
         
         let label = "";
-        // Labels mais curtas para mobile
         if (timeRange === 'day') {
             label = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         } else {
@@ -83,7 +83,8 @@ export default function InsightsView({ currentUser }) {
           fullLabel: date.toLocaleString('pt-BR'),
           shortLabel: label,
           level: item.level,
-          rawDate: date // Usado para ordenação interna se necessário
+          timestamp: item.timestamp, // Importante para a IA de burnout (precisa da data completa)
+          rawDate: date 
         });
 
         total += item.level;
@@ -106,6 +107,11 @@ export default function InsightsView({ currentUser }) {
       ].filter(item => item.value > 0);
       
       setMoodData(pieData);
+
+      // --- INTEGRAÇÃO DA IA DE BURNOUT ---
+      // Analisa o histórico para ver padrões de cansaço
+      const prediction = predictBurnout(historyData);
+      setBurnoutAlert(prediction);
 
       if (historyData.length > 0) {
         const calculatedAvg = Math.round(total / historyData.length);
@@ -130,7 +136,6 @@ export default function InsightsView({ currentUser }) {
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-24">
       
-      {/* HEADER + CONTROLES */}
       <header className="px-2">
         <div className="flex justify-between items-center mb-4">
             <div>
@@ -144,7 +149,6 @@ export default function InsightsView({ currentUser }) {
             </button>
         </div>
 
-        {/* TIME TOGGLE "PILL" */}
         <div className="bg-slate-100 p-1 rounded-xl flex gap-1 shadow-inner">
             {[{id: 'day', label: 'Hoje'}, {id: 'week', label: '7 Dias'}, {id: 'month', label: 'Mês'}].map((t) => (
                 <button
@@ -162,7 +166,24 @@ export default function InsightsView({ currentUser }) {
         </div>
       </header>
 
-      {/* VIBE CHECK CARD (NOVO!) */}
+      {/* --- ALERTA DE BURNOUT DA IA (Aparece se detectado) --- */}
+      {burnoutAlert && (
+          <div className="mx-2 bg-red-50 border border-red-100 p-4 rounded-2xl flex items-start gap-3 animate-pulse shadow-sm">
+              <div className="bg-red-100 p-2 rounded-full text-red-500 mt-1">
+                  <AlertTriangle size={18} />
+              </div>
+              <div>
+                  <h4 className="text-red-700 font-bold text-sm flex items-center gap-2">
+                      Padrão de Esgotamento Detectado
+                  </h4>
+                  <p className="text-red-600 text-xs mt-1 leading-relaxed font-medium">
+                      {burnoutAlert.message.replace("terças-feiras", burnoutAlert.day + "s")}
+                  </p>
+              </div>
+          </div>
+      )}
+
+      {/* VIBE CHECK CARD */}
       <div className="bg-white p-5 rounded-3xl border border-indigo-50 shadow-sm shadow-indigo-100 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-50 rounded-bl-full -mr-4 -mt-4 opacity-50"></div>
           <div className="flex items-start gap-4 relative z-10">
@@ -178,25 +199,19 @@ export default function InsightsView({ currentUser }) {
           </div>
       </div>
 
-      {/* GRID DE STATS (MINIMALISTA) */}
+      {/* GRID DE STATS */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
           <span className="text-2xl font-black text-indigo-600">{stats.avg}%</span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-             <Activity size={10}/> Média
-          </span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Activity size={10}/> Média</span>
         </div>
         <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
           <span className="text-2xl font-black text-emerald-500">{stats.max}%</span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-             <TrendingUp size={10}/> Pico
-          </span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><TrendingUp size={10}/> Pico</span>
         </div>
         <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
           <span className="text-2xl font-black text-rose-500">{stats.min}%</span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-             <TrendingDown size={10}/> Baixa
-          </span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><TrendingDown size={10}/> Baixa</span>
         </div>
       </div>
 
@@ -207,7 +222,6 @@ export default function InsightsView({ currentUser }) {
           {timeRange === 'day' ? 'Oscilação do Dia' : 'Histórico de Energia'}
         </h3>
         
-        {/* CORREÇÃO DO ERRO DE RENDERIZAÇÃO: Tamanho fixo no wrapper */}
         <div style={{ width: '100%', height: 200 }}>
           {data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -218,7 +232,6 @@ export default function InsightsView({ currentUser }) {
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                {/* Removida grade vertical para limpar o visual */}
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="shortLabel" 
@@ -230,18 +243,11 @@ export default function InsightsView({ currentUser }) {
                 />
                 <YAxis hide domain={[0, 100]} />
                 <Tooltip 
-                  contentStyle={{
-                      borderRadius: '16px', 
-                      border: 'none', 
-                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', 
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      color: '#475569'
-                  }}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold', color: '#475569' }}
                   cursor={{stroke: '#6366f1', strokeWidth: 2, strokeDasharray: '4 4'}}
                 />
                 <Area 
-                  type="monotoneX" // <--- AQUI ESTÁ A CORREÇÃO DA OSCILAÇÃO FALSA
+                  type="monotoneX" 
                   dataKey="level" 
                   stroke="#6366f1" 
                   strokeWidth={3}
@@ -255,40 +261,25 @@ export default function InsightsView({ currentUser }) {
             <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
                 <Activity size={32} className="mb-2" />
                 <p className="text-xs text-center px-8">
-                   {timeRange === 'day' 
-                      ? "Nada por aqui hoje. Mexe nessa bateria!" 
-                      : "Sem dados suficientes para gerar o gráfico."}
+                   {timeRange === 'day' ? "Nada por aqui hoje. Mexe nessa bateria!" : "Sem dados suficientes para gerar o gráfico."}
                 </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* GRÁFICO DE PIZZA (VIBE CHECK) */}
+      {/* GRÁFICO DE PIZZA */}
       {moodData.length > 0 && (
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
            <div className="w-1/2 relative h-32">
              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={moodData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={50}
-                    paddingAngle={6}
-                    dataKey="value"
-                    cornerRadius={6}
-                  >
-                    {moodData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                    ))}
+                  <Pie data={moodData} cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={6} dataKey="value" cornerRadius={6}>
+                    {moodData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />))}
                   </Pie>
                 </PieChart>
              </ResponsiveContainer>
-             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-               <span className="text-[10px] font-bold text-slate-400">MOOD</span>
-             </div>
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-[10px] font-bold text-slate-400">MOOD</span></div>
            </div>
            
            <div className="w-1/2 pl-2 space-y-2">
