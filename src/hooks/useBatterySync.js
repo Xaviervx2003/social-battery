@@ -1,56 +1,42 @@
-import { useState, useEffect, useRef } from "react";
-import { doc, collection, writeBatch } from "firebase/firestore";
-import { db } from "../firebaseConfig";
-import { getModeInfo } from "../utils/batteryHelpers";
+import { useState, useEffect, useRef } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 
 export function useBatterySync(user, batteryLevel) {
-  const [saveStatus, setSaveStatus] = useState("idle");
-  const isFirstRender = useRef(true);
+  const [saveStatus, setSaveStatus] = useState("saved"); // saved, waiting, saving
   const timeoutRef = useRef(null);
 
   useEffect(() => {
-    // SEGURANÇA: Se não tiver UID do Google, não faz nada.
-    if (!user || !user.uid) return;
+    if (!user?.uid) return;
 
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
+    // --- LÓGICA DO MODO FANTASMA ---
+    // Se o usuário estiver no modo fantasma, NÃO salva a bateria.
+    if (user.isGhostMode) {
+        setSaveStatus("saved"); // Finge que salvou para não ficar rodando
+        return; 
     }
 
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setSaveStatus("waiting");
 
+    // Cancelar timer anterior (Debounce)
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Esperar 2 segundos antes de salvar
     timeoutRef.current = setTimeout(async () => {
-      setSaveStatus("saving");
-      
       try {
-        const batch = writeBatch(db);
-        const currentMode = getModeInfo(batteryLevel);
-
-        // 1. Salva no Perfil (Usando UID do Google)
+        setSaveStatus("saving");
         const userRef = doc(db, "users", user.uid);
-        batch.set(userRef, { 
-          displayName: user.displayName || "Usuário",
-          photoURL: user.photoURL || "",
+        
+        await updateDoc(userRef, {
           currentBattery: batteryLevel,
-          lastUpdate: new Date().toISOString()
-        }, { merge: true });
-
-        // 2. Salva no Histórico (Usando UID do Google)
-        const historyRef = doc(collection(db, "battery_logs"));
-        batch.set(historyRef, {
-          uid: user.uid, // <--- O segredo está aqui!
-          level: batteryLevel,
-          mode: currentMode.mode,
-          timestamp: new Date()
+          lastUpdated: new Date()
         });
-
-        await batch.commit();
+        
         setSaveStatus("saved");
-        setTimeout(() => setSaveStatus("idle"), 3000);
-
       } catch (error) {
-        console.error("Erro ao salvar automático:", error);
+        console.error("Erro ao sincronizar bateria:", error);
         setSaveStatus("error");
       }
     }, 2000);
@@ -58,7 +44,7 @@ export function useBatterySync(user, batteryLevel) {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [batteryLevel, user]);
+  }, [batteryLevel, user]); // Recria se user mudar (ex: ativar ghost mode)
 
   return { saveStatus };
 }

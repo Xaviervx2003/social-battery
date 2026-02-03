@@ -31,8 +31,10 @@ export function AuthProvider({ children }) {
           }
 
           const savedBattery = existingData.currentBattery ?? existingData.batteryLevel ?? 65;
-          // NOVO: Carregar status salvo ou vazio
           const savedStatus = existingData.status || "";
+          
+          // NOVO: Carregar Modo Fantasma
+          const savedGhostMode = existingData.isGhostMode || false;
 
           const userData = {
             uid: currentUser.uid,
@@ -42,13 +44,12 @@ export function AuthProvider({ children }) {
             searchName: finalName.toLowerCase(), 
             userTag: finalTag,
             currentBattery: savedBattery,
-            status: savedStatus, // <--- CAMPO NOVO
+            status: savedStatus,
+            isGhostMode: savedGhostMode, // <--- CAMPO NOVO
             lastLogin: new Date()
           };
 
-          await setDoc(userRef, {
-            ...userData
-          }, { merge: true });
+          await setDoc(userRef, { ...userData }, { merge: true });
 
           setUser(userData);
         } catch (error) {
