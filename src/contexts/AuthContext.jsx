@@ -3,10 +3,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
 
-// Cria o contexto
 const AuthContext = createContext();
 
-// Hook personalizado para usar o contexto fácil
 export function useAuth() {
   return useContext(AuthContext);
 }
@@ -16,16 +14,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // O "Olheiro" do Firebase
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          // Busca dados no Firestore
           const userRef = doc(db, "users", currentUser.uid);
           const userSnap = await getDoc(userRef);
           const existingData = userSnap.exists() ? userSnap.data() : {};
 
-          // Lógica da Tag e Nome
           const finalName = existingData.displayName 
             ? existingData.displayName 
             : currentUser.displayName || "Usuário";
@@ -35,8 +30,9 @@ export function AuthProvider({ children }) {
               finalTag = Math.floor(1000 + Math.random() * 9000).toString();
           }
 
-          // Recupera bateria salva ou usa 65
           const savedBattery = existingData.currentBattery ?? existingData.batteryLevel ?? 65;
+          // NOVO: Carregar status salvo ou vazio
+          const savedStatus = existingData.status || "";
 
           const userData = {
             uid: currentUser.uid,
@@ -46,24 +42,17 @@ export function AuthProvider({ children }) {
             searchName: finalName.toLowerCase(), 
             userTag: finalTag,
             currentBattery: savedBattery,
+            status: savedStatus, // <--- CAMPO NOVO
             lastLogin: new Date()
           };
 
-          // Salva/Atualiza no banco
           await setDoc(userRef, {
-            uid: userData.uid,
-            email: userData.email,
-            photoURL: userData.photoURL,
-            displayName: userData.displayName,
-            searchName: userData.searchName,
-            userTag: userData.userTag,
-            lastLogin: userData.lastLogin
-            // Não salvamos batteryLevel aqui para não sobrescrever com valor antigo
+            ...userData
           }, { merge: true });
 
           setUser(userData);
         } catch (error) {
-          console.error("Erro ao carregar usuário:", error);
+          console.error("Erro auth:", error);
           setUser(null);
         }
       } else {
@@ -71,20 +60,12 @@ export function AuthProvider({ children }) {
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
-  // Função de Logout global
-  const logout = () => {
-    return signOut(auth);
-  };
+  const logout = () => signOut(auth);
 
-  const value = {
-    user,
-    loading,
-    logout
-  };
+  const value = { user, loading, logout };
 
   return (
     <AuthContext.Provider value={value}>
