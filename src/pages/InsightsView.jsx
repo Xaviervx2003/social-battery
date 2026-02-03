@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, YAxis, CartesianGrid 
 } from 'recharts';
-import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw, Sparkles, Brain } from "lucide-react";
 import { db } from "../firebaseConfig";
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 
@@ -13,12 +13,22 @@ export default function InsightsView({ currentUser }) {
   const [stats, setStats] = useState({ avg: 0, max: 0, min: 0 });
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('week'); // 'day', 'week', 'month'
+  const [vibeAnalysis, setVibeAnalysis] = useState({ text: "Carregando...", color: "text-slate-400" });
 
-  // Identificação do Usuário (aceita tanto objeto user quanto uid direto)
   const userId = currentUser?.uid || currentUser?.id;
   
-  // Cores do Gráfico
-  const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#6366f1'];
+  // Paleta de Cores "Aesthetic"
+  const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#8b5cf6'];
+
+  // --- O "CÉREBRO" DA GERAÇÃO Z ---
+  const analyzeVibe = (avg) => {
+      if (avg === 0) return { text: "Sem dados. Você existe? 👻", color: "text-slate-400" };
+      if (avg < 20) return { text: "Modo Zumbi Ativado 🧟‍♂️ Vai dormir!", color: "text-red-500" };
+      if (avg < 40) return { text: "Bateria Social de NPC 😐", color: "text-orange-500" };
+      if (avg < 60) return { text: "Na média, vivendo perigosamente 🤷", color: "text-yellow-600" };
+      if (avg < 85) return { text: "Energia de Protagonista ✨", color: "text-indigo-600" };
+      return { text: "Deus da Energia?! ⚡ Tu é máquina!", color: "text-green-600" };
+  };
 
   const fetchHistory = async () => {
     if (!userId) {
@@ -31,6 +41,7 @@ export default function InsightsView({ currentUser }) {
       const now = new Date();
       let startDate = new Date();
 
+      // Ajuste de datas mais preciso
       if (timeRange === 'day') {
         startDate.setHours(0, 0, 0, 0);
       } else if (timeRange === 'week') {
@@ -56,12 +67,12 @@ export default function InsightsView({ currentUser }) {
 
       querySnapshot.forEach((doc) => {
         const item = doc.data();
-        // Proteção contra datas inválidas
         if (!item.timestamp) return;
 
         const date = item.timestamp.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
         
         let label = "";
+        // Labels mais curtas para mobile
         if (timeRange === 'day') {
             label = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         } else {
@@ -71,7 +82,8 @@ export default function InsightsView({ currentUser }) {
         historyData.push({
           fullLabel: date.toLocaleString('pt-BR'),
           shortLabel: label,
-          level: item.level
+          level: item.level,
+          rawDate: date // Usado para ordenação interna se necessário
         });
 
         total += item.level;
@@ -87,22 +99,21 @@ export default function InsightsView({ currentUser }) {
       setData(historyData);
 
       const pieData = [
-        { name: 'Esgotado', value: moods.Esgotado },
-        { name: 'Baixo', value: moods.Baixo },
-        { name: 'Bem', value: moods.Bem },
-        { name: 'Super', value: moods.Super },
+        { name: '💀 Morto', value: moods.Esgotado },
+        { name: '😐 Meh', value: moods.Baixo },
+        { name: '🙂 Suave', value: moods.Bem },
+        { name: '🤩 Hype', value: moods.Super },
       ].filter(item => item.value > 0);
       
       setMoodData(pieData);
 
       if (historyData.length > 0) {
-        setStats({
-          avg: Math.round(total / historyData.length),
-          max: max,
-          min: min
-        });
+        const calculatedAvg = Math.round(total / historyData.length);
+        setStats({ avg: calculatedAvg, max, min });
+        setVibeAnalysis(analyzeVibe(calculatedAvg));
       } else {
         setStats({ avg: 0, max: 0, min: 0 });
+        setVibeAnalysis(analyzeVibe(0));
       }
 
     } catch (error) {
@@ -118,140 +129,173 @@ export default function InsightsView({ currentUser }) {
 
   return (
     <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-24">
+      
+      {/* HEADER + CONTROLES */}
       <header className="px-2">
         <div className="flex justify-between items-center mb-4">
             <div>
-                <h1 className="text-2xl font-bold text-slate-800">Seus Insights</h1>
-                <p className="text-slate-500 text-sm">Análise Temporal</p>
+                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    Insights <Sparkles size={18} className="text-yellow-500 fill-yellow-500" />
+                </h1>
+                <p className="text-slate-500 text-xs font-medium">Sua capivara energética 📊</p>
             </div>
-            <button onClick={fetchHistory} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors">
+            <button onClick={fetchHistory} className="p-2 bg-white border border-slate-100 shadow-sm rounded-full hover:bg-slate-50 transition-colors active:scale-95">
                 <RefreshCw size={18} className={loading ? "animate-spin text-indigo-600" : "text-slate-600"} />
             </button>
         </div>
 
-        {/* SELETOR DE TEMPO */}
-        <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-            {['day', 'week', 'month'].map((range) => (
+        {/* TIME TOGGLE "PILL" */}
+        <div className="bg-slate-100 p-1 rounded-xl flex gap-1 shadow-inner">
+            {[{id: 'day', label: 'Hoje'}, {id: 'week', label: '7 Dias'}, {id: 'month', label: 'Mês'}].map((t) => (
                 <button
-                    key={range}
-                    onClick={() => setTimeRange(range)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                        timeRange === range 
-                        ? 'bg-white text-indigo-600 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700'
+                    key={t.id}
+                    onClick={() => setTimeRange(t.id)}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+                        timeRange === t.id 
+                        ? 'bg-white text-indigo-600 shadow-sm scale-[1.02]' 
+                        : 'text-slate-400 hover:text-slate-600'
                     }`}
                 >
-                    {range === 'day' && 'Hoje'}
-                    {range === 'week' && '7 Dias'}
-                    {range === 'month' && '30 Dias'}
+                    {t.label}
                 </button>
             ))}
         </div>
       </header>
 
-      {/* Grid de Estatísticas */}
+      {/* VIBE CHECK CARD (NOVO!) */}
+      <div className="bg-white p-5 rounded-3xl border border-indigo-50 shadow-sm shadow-indigo-100 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-50 rounded-bl-full -mr-4 -mt-4 opacity-50"></div>
+          <div className="flex items-start gap-4 relative z-10">
+              <div className="bg-indigo-100 p-3 rounded-2xl text-indigo-600">
+                  <Brain size={24} />
+              </div>
+              <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Vibe Check</h3>
+                  <p className={`text-lg font-bold leading-tight ${vibeAnalysis.color}`}>
+                      "{vibeAnalysis.text}"
+                  </p>
+              </div>
+          </div>
+      </div>
+
+      {/* GRID DE STATS (MINIMALISTA) */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-indigo-600 rounded-2xl p-4 text-white shadow-lg shadow-indigo-200 flex flex-col items-center justify-center">
-          <Activity size={20} className="mb-1 opacity-80" />
-          <span className="text-2xl font-bold">{stats.avg}%</span>
-          <span className="text-[10px] opacity-70 uppercase">Média</span>
+        <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
+          <span className="text-2xl font-black text-indigo-600">{stats.avg}%</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+             <Activity size={10}/> Média
+          </span>
         </div>
-        <div className="bg-emerald-500 rounded-2xl p-4 text-white shadow-lg shadow-emerald-200 flex flex-col items-center justify-center">
-          <TrendingUp size={20} className="mb-1 opacity-80" />
-          <span className="text-2xl font-bold">{stats.max}%</span>
-          <span className="text-[10px] opacity-70 uppercase">Pico</span>
+        <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
+          <span className="text-2xl font-black text-emerald-500">{stats.max}%</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+             <TrendingUp size={10}/> Pico
+          </span>
         </div>
-        <div className="bg-rose-500 rounded-2xl p-4 text-white shadow-lg shadow-rose-200 flex flex-col items-center justify-center">
-          <TrendingDown size={20} className="mb-1 opacity-80" />
-          <span className="text-2xl font-bold">{stats.min}%</span>
-          <span className="text-[10px] opacity-70 uppercase">Baixa</span>
+        <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
+          <span className="text-2xl font-black text-rose-500">{stats.min}%</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+             <TrendingDown size={10}/> Baixa
+          </span>
         </div>
       </div>
 
-      {/* GRÁFICO DE ÁREA (Principal) */}
+      {/* GRÁFICO PRINCIPAL */}
       <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-        <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2 text-sm">
-          <Zap size={16} className="text-indigo-500"/>
-          {timeRange === 'day' ? 'Variação Horária' : 'Tendência'}
+        <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2 text-sm">
+          <Zap size={16} className="text-yellow-500 fill-yellow-500"/>
+          {timeRange === 'day' ? 'Oscilação do Dia' : 'Histórico de Energia'}
         </h3>
         
-        {/* CORREÇÃO DO ERRO DE WIDTH/HEIGHT */}
-        {/* O container precisa ter tamanho explícito antes do gráfico carregar */}
-        <div style={{ width: '100%', height: 200, minWidth: 0 }}>
+        {/* CORREÇÃO DO ERRO DE RENDERIZAÇÃO: Tamanho fixo no wrapper */}
+        <div style={{ width: '100%', height: 200 }}>
           {data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorLevel" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.8}/>
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.6}/>
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
+                {/* Removida grade vertical para limpar o visual */}
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="shortLabel" 
                   tick={{fontSize: 10, fill: '#94a3b8'}} 
                   axisLine={false} 
                   tickLine={false}
-                  minTickGap={20}
+                  minTickGap={30}
+                  interval="preserveStartEnd"
                 />
                 <YAxis hide domain={[0, 100]} />
                 <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px'}}
-                  cursor={{stroke: '#6366f1', strokeWidth: 1}}
+                  contentStyle={{
+                      borderRadius: '16px', 
+                      border: 'none', 
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', 
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: '#475569'
+                  }}
+                  cursor={{stroke: '#6366f1', strokeWidth: 2, strokeDasharray: '4 4'}}
                 />
                 <Area 
-                  type="monotone" 
+                  type="monotoneX" // <--- AQUI ESTÁ A CORREÇÃO DA OSCILAÇÃO FALSA
                   dataKey="level" 
                   stroke="#6366f1" 
                   strokeWidth={3}
                   fillOpacity={1} 
                   fill="url(#colorLevel)" 
+                  animationDuration={1500}
                 />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-full flex items-center justify-center text-slate-300 text-xs text-center px-8">
-                {timeRange === 'day' 
-                    ? "Nenhum registro hoje. Mude sua bateria na Home para começar!" 
-                    : "Sem histórico nesse período."}
+            <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
+                <Activity size={32} className="mb-2" />
+                <p className="text-xs text-center px-8">
+                   {timeRange === 'day' 
+                      ? "Nada por aqui hoje. Mexe nessa bateria!" 
+                      : "Sem dados suficientes para gerar o gráfico."}
+                </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* GRÁFICO DE PIZZA (Secundário) */}
+      {/* GRÁFICO DE PIZZA (VIBE CHECK) */}
       {moodData.length > 0 && (
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
-           
-           <div style={{ width: 120, height: 120, position: 'relative' }}>
+           <div className="w-1/2 relative h-32">
              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={moodData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={35}
+                    innerRadius={30}
                     outerRadius={50}
-                    paddingAngle={5}
+                    paddingAngle={6}
                     dataKey="value"
+                    cornerRadius={6}
                   >
                     {moodData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                     ))}
                   </Pie>
                 </PieChart>
              </ResponsiveContainer>
              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-               <span className="text-xs font-bold text-slate-400">Vibe</span>
+               <span className="text-[10px] font-bold text-slate-400">MOOD</span>
              </div>
            </div>
            
-           <div className="w-1/2 pl-4 space-y-2">
-             <h4 className="font-bold text-slate-700 text-sm mb-2">Resumo</h4>
+           <div className="w-1/2 pl-2 space-y-2">
+             <h4 className="font-bold text-slate-700 text-xs mb-2 uppercase tracking-wide">Distribuição</h4>
              {moodData.map((entry, index) => (
-               <div key={index} className="flex items-center gap-2 text-xs text-slate-500">
-                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+               <div key={index} className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                 <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                  <span>{entry.name}</span>
                </div>
              ))}
