@@ -11,33 +11,54 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Escuta o login do Google em tempo real
+    // Esse "olheiro" fica vigiando se alguém logou
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // 1. Tenta pegar dados extras do banco (se tiver)
+        // Se logou, vamos buscar os dados no banco
         const userRef = doc(db, "users", currentUser.uid);
         const userSnap = await getDoc(userRef);
         
-        let userData = {
+        // Dados existentes no banco (se houver)
+        const existingData = userSnap.exists() ? userSnap.data() : {};
+
+        // --- A MÁGICA DO NOME E TAG ---
+        const finalName = existingData.displayName 
+          ? existingData.displayName 
+          : currentUser.displayName || "Usuário";
+
+        let finalTag = existingData.userTag;
+        if (!finalTag) {
+            finalTag = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+
+        // --- CORREÇÃO DO BUG DO F5 ---
+        // Agora lemos a bateria salva. Se não tiver, assume 65.
+        // Tenta ler 'currentBattery' (novo padrão) ou 'batteryLevel' (antigo)
+        const savedBattery = existingData.currentBattery ?? existingData.batteryLevel ?? 65;
+
+        const userData = {
           uid: currentUser.uid,
           email: currentUser.email,
           photoURL: currentUser.photoURL,
-          // AQUI ESTÁ A CORREÇÃO:
-          // Tenta pegar do banco, se não tiver, pega do Google, se não tiver, vira "Usuário"
-          displayName: userSnap.exists() && userSnap.data().displayName 
-            ? userSnap.data().displayName 
-            : currentUser.displayName || "Usuário"
+          displayName: finalName,
+          searchName: finalName.toLowerCase(), 
+          userTag: finalTag,
+          currentBattery: savedBattery, // <--- SALVAMOS NO ESTADO LOCAL
+          lastLogin: new Date()
         };
 
-        // 2. Se o usuário for novo (não tem no banco), cria o registro agora
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            displayName: userData.displayName,
-            photoURL: userData.photoURL,
-            email: userData.email,
-            createdAt: new Date()
-          });
-        }
+        // Salva/Atualiza no Firestore (merge: true não apaga o que já tem)
+        await setDoc(userRef, {
+          uid: userData.uid,
+          email: userData.email,
+          photoURL: userData.photoURL,
+          displayName: userData.displayName,
+          searchName: userData.searchName,
+          userTag: userData.userTag,
+          lastLogin: userData.lastLogin
+          // NOTA: Não salvamos a bateria AQUI para não sobrescrever com 65 se a leitura falhar.
+          // O hook useBatterySync na Home cuida de salvar a bateria.
+        }, { merge: true });
 
         setUser(userData);
       } else {
@@ -64,7 +85,12 @@ function App() {
   return (
     <div>
       {user ? (
-        <HomePage user={user} onLogout={handleLogout} />
+        // PASSAMOS O VALOR LIDO DO BANCO PARA A HOME
+        <HomePage 
+            user={user} 
+            initialLevel={user.currentBattery} 
+            onLogout={handleLogout} 
+        />
       ) : (
         <LoginPage />
       )}

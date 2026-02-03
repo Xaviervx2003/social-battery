@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, YAxis, CartesianGrid 
 } from 'recharts';
-import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw, Hash } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Activity, RefreshCw } from "lucide-react";
 import { db } from "../firebaseConfig";
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
 
@@ -14,8 +14,8 @@ export default function InsightsView({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('week'); // 'day', 'week', 'month'
 
-  // Identificação do Usuário
-  const userId = currentUser?.uid || currentUser?.name;
+  // Identificação do Usuário (aceita tanto objeto user quanto uid direto)
+  const userId = currentUser?.uid || currentUser?.id;
   
   // Cores do Gráfico
   const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#6366f1'];
@@ -56,7 +56,10 @@ export default function InsightsView({ currentUser }) {
 
       querySnapshot.forEach((doc) => {
         const item = doc.data();
-        const date = item.timestamp?.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
+        // Proteção contra datas inválidas
+        if (!item.timestamp) return;
+
+        const date = item.timestamp.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
         
         let label = "";
         if (timeRange === 'day') {
@@ -172,8 +175,9 @@ export default function InsightsView({ currentUser }) {
           {timeRange === 'day' ? 'Variação Horária' : 'Tendência'}
         </h3>
         
-        {/* CORREÇÃO 1: min-w-0 e style explícito para evitar erro do Recharts */}
-        <div className="h-48 w-full min-w-0" style={{ width: '100%', height: 192 }}>
+        {/* CORREÇÃO DO ERRO DE WIDTH/HEIGHT */}
+        {/* O container precisa ter tamanho explícito antes do gráfico carregar */}
+        <div style={{ width: '100%', height: 200, minWidth: 0 }}>
           {data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data}>
@@ -209,7 +213,7 @@ export default function InsightsView({ currentUser }) {
           ) : (
             <div className="h-full flex items-center justify-center text-slate-300 text-xs text-center px-8">
                 {timeRange === 'day' 
-                    ? "Nenhum registro hoje. Vá na Home e salve algo!" 
+                    ? "Nenhum registro hoje. Mude sua bateria na Home para começar!" 
                     : "Sem histórico nesse período."}
             </div>
           )}
@@ -220,8 +224,7 @@ export default function InsightsView({ currentUser }) {
       {moodData.length > 0 && (
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
            
-           {/* CORREÇÃO 2: Wrapper do PieChart protegido com min-w-0 e flex-1 */}
-           <div className="flex-1 h-32 relative min-w-0" style={{ height: 128 }}>
+           <div style={{ width: 120, height: 120, position: 'relative' }}>
              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -244,7 +247,6 @@ export default function InsightsView({ currentUser }) {
              </div>
            </div>
            
-           {/* Legenda */}
            <div className="w-1/2 pl-4 space-y-2">
              <h4 className="font-bold text-slate-700 text-sm mb-2">Resumo</h4>
              {moodData.map((entry, index) => (
