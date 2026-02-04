@@ -1,16 +1,43 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
 
-const AuthContext = createContext();
-
-export function useAuth() {
-  return useContext(AuthContext);
+// 1. Definimos a "Cara" do nosso Usuário (Contrato)
+export interface UserData {
+  uid: string;
+  email: string | null;
+  photoURL: string | null;
+  displayName: string;
+  searchName: string;
+  userTag: string;
+  currentBattery: number;
+  status: string;
+  isGhostMode: boolean;
+  lastLogin: Date;
 }
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+// 2. Definimos o que o Contexto exporta
+interface AuthContextType {
+  user: UserData | null;
+  loading: boolean;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Hook personalizado com proteção de tipo
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth deve ser usado dentro de um AuthProvider");
+  }
+  return context;
+}
+
+// Tipagem das props do Provider (ele recebe 'children')
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,11 +59,9 @@ export function AuthProvider({ children }) {
 
           const savedBattery = existingData.currentBattery ?? existingData.batteryLevel ?? 65;
           const savedStatus = existingData.status || "";
-          
-          // NOVO: Carregar Modo Fantasma
           const savedGhostMode = existingData.isGhostMode || false;
 
-          const userData = {
+          const userData: UserData = {
             uid: currentUser.uid,
             email: currentUser.email,
             photoURL: currentUser.photoURL,
@@ -45,7 +70,7 @@ export function AuthProvider({ children }) {
             userTag: finalTag,
             currentBattery: savedBattery,
             status: savedStatus,
-            isGhostMode: savedGhostMode, // <--- CAMPO NOVO
+            isGhostMode: savedGhostMode,
             lastLogin: new Date()
           };
 
@@ -64,7 +89,9 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  const logout = () => signOut(auth);
+  const logout = async () => {
+    await signOut(auth);
+  };
 
   const value = { user, loading, logout };
 

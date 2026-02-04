@@ -1,17 +1,54 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { 
-  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, limit, documentId 
+  collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, limit, documentId, Timestamp, DocumentData 
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import { 
-  Zap, Search, UserPlus, Check, X, Users, Loader2, Hash, 
-  MessageSquare, Bell, Battery, Trash2, Clock, AlertTriangle, Flame 
+  Search, UserPlus, Check, X, Users, Loader2, Hash, 
+  Bell, Battery, Trash2, Clock, Zap, AlertCircle, Flame 
 } from "lucide-react";
+import { UserData } from "../contexts/AuthContext";
 
-// --- CUSTOM HOOK: Gerencia a lista de amigos em Tempo Real ---
-// Isso resolve o problema de performance e custo, separando a lógica da tela.
-function useFriendsList(currentUser) {
-  const [friends, setFriends] = useState([]);
+// --- INTERFACES ---
+
+// Um "Amigo" é um Usuário com dados extras do relacionamento
+interface Friend extends UserData {
+  requestId: string;
+  streak: number;
+  finalBattery: number;
+  lastInteraction?: any; // Pode vir do Firestore
+}
+
+// Um "Pedido de Amizade"
+interface FriendRequest {
+  requestId: string;
+  from: string;
+  to: string;
+  status: string;
+  displayName?: string;
+  photoURL?: string;
+  timestamp?: any;
+}
+
+// Props do componente
+interface FriendsViewProps {
+  currentUser: UserData | null;
+}
+
+// Estados auxiliares
+interface NotificationState {
+  message: string;
+  type: 'success' | 'error';
+}
+
+interface ModalState {
+  type: 'message' | 'remove' | null;
+  data: Friend | any | null; // Pode ser Friend ou UserData dependendo do contexto
+}
+
+// --- CUSTOM HOOK ---
+function useFriendsList(currentUser: UserData | null) {
+  const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,43 +56,23 @@ function useFriendsList(currentUser) {
 
     setLoading(true);
 
-    // 1. Escuta as conexões de amizade (friend_requests aceitos)
-    // O Firebase cobra 1 leitura inicial + 1 por mudança. Muito mais barato que setInterval.
     const q1 = query(collection(db, "friend_requests"), where("to", "==", currentUser.uid), where("status", "==", "accepted"));
     const q2 = query(collection(db, "friend_requests"), where("from", "==", currentUser.uid), where("status", "==", "accepted"));
 
-    // Função auxiliar para processar as conexões
-    const handleConnections = (snapshots) => {
-      const friendMap = new Map();
-      
-      snapshots.forEach(snap => {
-        snap.docs.forEach(doc => {
-          const data = doc.data();
-          // Define quem é o amigo baseada em quem enviou/recebeu
-          const friendUid = data.from === currentUser.uid ? data.to : data.from;
-          friendMap.set(friendUid, { requestId: doc.id, ...data });
-        });
-      });
-
-      return friendMap;
-    };
-
-    // Inscreve nos dois ouvintes (enviados e recebidos)
+    // Inscreve nos dois ouvintes
     const unsub1 = onSnapshot(q1, (snap1) => updateFriendsList(snap1, 'to'));
     const unsub2 = onSnapshot(q2, (snap2) => updateFriendsList(snap2, 'from'));
 
-    let connectionsTo = [];
-    let connectionsFrom = [];
+    let connectionsTo: DocumentData[] = [];
+    let connectionsFrom: DocumentData[] = [];
 
-    // Lógica para combinar os resultados e buscar os dados dos usuários
-    const updateFriendsList = async (snapshot, type) => {
+    const updateFriendsList = async (snapshot: any, type: 'to' | 'from') => {
       if (type === 'to') connectionsTo = snapshot.docs;
       else connectionsFrom = snapshot.docs;
 
       const combinedDocs = [...connectionsTo, ...connectionsFrom];
       const friendMap = new Map();
-
-      const friendUids = [];
+      const friendUids: string[] = [];
 
       combinedDocs.forEach(d => {
         const data = d.data();
@@ -70,56 +87,38 @@ function useFriendsList(currentUser) {
         return;
       }
 
-      // 2. Escuta os DADOS dos usuários amigos (Bateria, Status)
-      // Otimização: Firestore limita 'in' a 10 itens. Se tiver > 10, ideal é quebrar em chunks.
-      // Para este MVP, vamos assumir que o "in" funciona ou fazer listeners individuais se crescer.
-      // A melhor prática escalável aqui seria denormalizar dados, mas esta solução resolve o custo imediato.
-      
-      // Nota técnica: Para listas grandes (>10), faríamos múltiplos queries. 
-      // Simplificação segura para o momento:
+      // Busca dados dos usuários (Limitado a 10 para MVP/Exemplo)
       const usersRef = collection(db, "users");
-      // Divide em chunks de 10 se necessário (simplificado aqui para até 10 amigos por query)
-      // Se houver muitos amigos, uma estratégia de loop ou busca individual por snapshot é mais segura.
-      
-      // Estratégia Híbrida: Criar listeners para os dados dos usuários
       const qUsers = query(usersRef, where(documentId(), 'in', friendUids.slice(0, 10))); 
       
-      // OBS: Se você tiver mais de 10 amigos, o Firebase exige lógica de chunk. 
-      // Para garantir que funcione agora sem erro, limitamos a 10 ou usamos a lógica antiga SEM setInterval.
-      // Vamos usar a lógica de onSnapshot no query de usuários:
-      
       const unsubUsers = onSnapshot(qUsers, (userSnap) => {
-        const friendsData = [];
+        const friendsData: Friend[] = [];
         userSnap.forEach(docUser => {
-          const uData = docUser.data();
+          const uData = docUser.data() as UserData;
           const requestData = friendMap.get(docUser.id);
           
           friendsData.push({
-            id: docUser.id,
             ...uData,
-            // Dados derivados do relacionamento
+            // Sobrescrevemos ou adicionamos campos específicos de Friend
+            uid: docUser.id, // Garante que o ID venha do doc
             requestId: requestData.requestId,
-            requestData: requestData,
             streak: requestData.streak || 0,
-            // Fallbacks
-            finalBattery: uData.currentBattery ?? uData.batteryLevel ?? 0,
-            status: uData.status || ""
+            finalBattery: uData.currentBattery ?? 0,
+            lastInteraction: requestData.lastInteraction
           });
         });
         
-        // Ordena por bateria
+        // --- SMART SORT ALGORITHM ---
         friendsData.sort((a, b) => {
-            // Calcula Score A
-            const urgencyA = 100 - a.finalBattery; // Quanto menor a bateria, maior a urgência
-            const intimacyA = (a.streak || 0) * 5; // Cada dia de fogo vale 5 pontos
+            const urgencyA = 100 - a.finalBattery;
+            const intimacyA = (a.streak || 0) * 5;
             const scoreA = urgencyA + intimacyA;
 
-            // Calcula Score B
             const urgencyB = 100 - b.finalBattery;
             const intimacyB = (b.streak || 0) * 5;
             const scoreB = urgencyB + intimacyB;
 
-            return scoreB - scoreA; // Maior score primeiro
+            return scoreB - scoreA;
         });
         
         setFriends(friendsData);
@@ -139,38 +138,39 @@ function useFriendsList(currentUser) {
 }
 
 // --- COMPONENTE PRINCIPAL ---
-export default function FriendsView({ currentUser }) {
-  const [view, setView] = useState('list');
-  const [requests, setRequests] = useState([]);
-  const [searchResults, setSearchResults] = useState([]);
+export default function FriendsView({ currentUser }: FriendsViewProps) {
+  const [view, setView] = useState<'list' | 'search' | 'requests'>('list');
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [searchResults, setSearchResults] = useState<UserData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Usando o Hook Otimizado
   const { friends, loading } = useFriendsList(currentUser);
   
-  const [notification, setNotification] = useState(null); 
-  const [modalState, setModalState] = useState({ type: null, data: null });
+  const [notification, setNotification] = useState<NotificationState | null>(null); 
+  const [modalState, setModalState] = useState<ModalState>({ type: null, data: null });
   const [messageText, setMessageText] = useState("");
-  const [actionStatus, setActionStatus] = useState("idle");
+  const [actionStatus, setActionStatus] = useState<"idle" | "loading" | "success">("idle");
 
   const quickMessages = ["Bora sair? 🍻", "Força aí! 💪", "Saudades! ❤️", "Acorda!! ⏰", "Qual a boa? 👀"];
 
-  const showToast = useCallback((message, type = "success") => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = "success") => {
       setNotification({ message, type });
       setTimeout(() => setNotification(null), 3000); 
   }, []);
 
-  const formatLastSeen = (timestamp) => {
+  const formatLastSeen = (timestamp: any) => {
     if (!timestamp) return "Há muito tempo";
+    // Tenta converter se for Timestamp do Firebase, senão usa Date normal
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const diff = (new Date() - date) / 1000; 
+    const diff = (new Date().getTime() - date.getTime()) / 1000; 
+    
     if (diff < 60) return "Agora mesmo";
     if (diff < 3600) return `Há ${Math.floor(diff / 60)} min`;
     if (diff < 86400) return `Há ${Math.floor(diff / 3600)}h`;
     return `Há ${Math.floor(diff / 86400)} dias`;
   };
 
-  // Carregamento de Requests (Mantido em tempo real simples)
+  // Carregamento de Requests
   useEffect(() => {
     if (!currentUser?.uid) return;
     const qRequests = query(
@@ -179,12 +179,29 @@ export default function FriendsView({ currentUser }) {
       where("status", "==", "pending")
     );
     const unsub = onSnapshot(qRequests, async (snapshot) => {
-      const reqs = [];
+      const reqs: FriendRequest[] = [];
       for (const d of snapshot.docs) {
         const fromId = d.data().from;
         const userSnap = await getDocs(query(collection(db, "users"), where("uid", "==", fromId)));
-        if (!userSnap.empty) reqs.push({ requestId: d.id, ...userSnap.docs[0].data() });
-        else reqs.push({ requestId: d.id, displayName: "Desconhecido", uid: fromId });
+        if (!userSnap.empty) {
+            const userData = userSnap.docs[0].data();
+            reqs.push({ 
+                requestId: d.id, 
+                from: fromId,
+                to: currentUser.uid,
+                status: 'pending',
+                displayName: userData.displayName,
+                photoURL: userData.photoURL
+            });
+        } else {
+            reqs.push({ 
+                requestId: d.id, 
+                from: fromId, 
+                to: currentUser.uid, 
+                status: 'pending', 
+                displayName: "Desconhecido" 
+            });
+        }
       }
       setRequests(reqs);
     });
@@ -192,18 +209,18 @@ export default function FriendsView({ currentUser }) {
   }, [currentUser]);
 
   // --- AÇÕES ---
-  const handleSearch = async (e) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchTerm) return;
+    if (!searchTerm || !currentUser) return;
     try {
         const usersRef = collection(db, "users");
-        const q = query(usersRef, limit(20)); // Limite reduzido para economia
+        const q = query(usersRef, limit(20)); 
         const snapshot = await getDocs(q);
         const term = searchTerm.toLowerCase().trim();
         const cleanTag = term.replace("#", "");
         
         const results = snapshot.docs
-            .map(d => ({ id: d.id, ...d.data() })) 
+            .map(d => d.data() as UserData) 
             .filter(u => {
                 if (u.uid === currentUser.uid) return false;
                 const isFriend = friends.some(f => f.uid === u.uid);
@@ -216,7 +233,8 @@ export default function FriendsView({ currentUser }) {
     } catch (err) { showToast("Erro ao buscar.", "error"); }
   };
 
-  const sendFriendRequest = async (targetUser) => {
+  const sendFriendRequest = async (targetUser: UserData) => {
+    if (!currentUser) return;
     try {
         const qCheck = query(collection(db, "friend_requests"), where("from", "==", currentUser.uid), where("to", "==", targetUser.uid), where("status", "==", "pending"));
         const checkSnap = await getDocs(qCheck);
@@ -227,7 +245,7 @@ export default function FriendsView({ currentUser }) {
     } catch (error) { showToast("Erro ao enviar.", "error"); }
   };
 
-  const acceptRequest = async (req) => {
+  const acceptRequest = async (req: FriendRequest) => {
     try {
         const ref = doc(db, "friend_requests", req.requestId);
         await updateDoc(ref, { status: "accepted", streak: 0, lastInteraction: new Date() });
@@ -249,7 +267,7 @@ export default function FriendsView({ currentUser }) {
 
   const handleSendMessage = async () => {
     const friend = modalState.data;
-    if (!friend) return;
+    if (!friend || !currentUser) return;
     setActionStatus("loading");
     try {
         const finalMessage = messageText.trim() || "te mandou um raio de energia! ⚡";
@@ -258,7 +276,6 @@ export default function FriendsView({ currentUser }) {
             type: "energy", message: finalMessage, read: false, timestamp: new Date() 
         });
         
-        // Logica simples de streak para MVP
         if (friend.requestId) {
              await updateDoc(doc(db, "friend_requests", friend.requestId), { lastInteraction: new Date() });
         }
@@ -268,7 +285,7 @@ export default function FriendsView({ currentUser }) {
     } catch (err) { setActionStatus("idle"); }
   };
 
-  const openModal = (type, data) => { setModalState({ type, data }); setMessageText(""); setActionStatus("idle"); };
+  const openModal = (type: 'message' | 'remove', data: any) => { setModalState({ type, data }); setMessageText(""); setActionStatus("idle"); };
   const closeModal = () => setModalState({ type: null, data: null });
 
   return (
@@ -278,6 +295,7 @@ export default function FriendsView({ currentUser }) {
               {notification.type === 'success' ? <Check size={16}/> : <AlertCircle size={16}/>} {notification.message}
           </div>
       )}
+      
       {/* HEADER TABS */}
       <div className="flex bg-white p-1 rounded-2xl shadow-sm mb-4 sticky top-0 z-30">
         <button onClick={() => setView('list')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${view === 'list' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400'}`}><Users size={18}/> Galera</button>
@@ -345,7 +363,7 @@ export default function FriendsView({ currentUser }) {
         </div>
       )}
 
-      {/* MODAIS (Message & Remove - Simplified for brevity) */}
+      {/* MODAIS */}
       {modalState.type === 'message' && modalState.data && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">

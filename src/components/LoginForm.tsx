@@ -1,30 +1,42 @@
 import React, { useState } from "react";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../firebaseConfig";
-import { LogIn, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
-export default function LoginForm({ onSubmit }) {
-  const [error, setError] = useState(null);
+// 1. Definimos o formato dos dados que esse formulário devolve
+export interface LoginSubmitData {
+  name: string | null;
+  email: string | null;
+  photo: string | null;
+  uid: string;
+}
+
+// 2. Definimos as Props do componente
+interface LoginFormProps {
+  onSubmit: (data: LoginSubmitData) => void;
+}
+
+export default function LoginForm({ onSubmit }: LoginFormProps) {
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // Abre o popup do Google
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      
-      // Manda os dados completos para a página de Login processar
+
+      // Manda os dados completos para a página pai processar
       onSubmit({
         name: user.displayName,
         email: user.email,
-        photo: user.photoURL, // <--- Aqui vem a foto do perfil!
-        uid: user.uid
+        photo: user.photoURL,
+        uid: user.uid,
       });
-      
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setError("Erro ao conectar com Google. Tente novamente.");
       setLoading(false);
@@ -38,7 +50,9 @@ export default function LoginForm({ onSubmit }) {
           ⚡
         </div>
         <h1 className="text-2xl font-bold text-slate-800">Social Battery</h1>
-        <p className="text-slate-400 text-sm">Entre para compartilhar sua energia</p>
+        <p className="text-slate-400 text-sm">
+          Entre para compartilhar sua energia
+        </p>
       </div>
 
       {error && (
@@ -57,12 +71,14 @@ export default function LoginForm({ onSubmit }) {
         ) : (
           <>
             {/* Logo simples do Google via CSS */}
-            <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-blue-500 via-red-500 to-yellow-500 flex items-center justify-center text-[10px] text-white font-bold">G</div>
+            <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-blue-500 via-red-500 to-yellow-500 flex items-center justify-center text-[10px] text-white font-bold">
+              G
+            </div>
             Entrar com Google
           </>
         )}
       </button>
-      
+
       <p className="text-xs text-slate-300 mt-6">
         Usamos apenas seu nome e foto para identificar você para seus amigos.
       </p>

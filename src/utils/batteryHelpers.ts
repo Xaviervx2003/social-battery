@@ -1,6 +1,18 @@
-import { Moon, MessageCircle, Coffee, Zap } from "lucide-react";
+import { Moon, MessageCircle, Coffee, Zap, LucideIcon } from "lucide-react";
 
-export const getModeInfo = (level) => {
+// 1. Definimos o "formato" do objeto que essa função retorna
+export interface BatteryMode {
+  mode: string;
+  color: string;
+  textColor: string;
+  accent: string;
+  icon: LucideIcon; // Tipo específico para ícones da Lucide
+  desc: string;
+  avatarBg: string;
+}
+
+// 2. Tipamos a entrada (level é número) e a saída (retorna um BatteryMode)
+export const getModeInfo = (level: number): BatteryMode => {
   if (level <= 20)
     return {
       mode: "Modo Caverna",

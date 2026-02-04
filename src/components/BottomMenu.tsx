@@ -1,8 +1,18 @@
 import React from "react";
-import { Battery, Users, BarChart2, Bell } from "lucide-react"; // Sugeri 'Users' para amigos, mas pode manter MessageCircle
+import { Battery, Users, BarChart2, Bell, LucideIcon } from "lucide-react";
 
-// 1. Extraímos o sub-componente para fora (Regra: Componentes puros)
-const NavButton = ({ icon: Icon, id, activeTab, onClick, label, badgeCount }) => {
+// 1. Tipagem das props do botão individual
+interface NavButtonProps {
+  icon: LucideIcon; // Tipo específico para ícones da Lucide
+  id: string;
+  activeTab: string;
+  onClick: (id: string) => void;
+  label: string;
+  badgeCount?: number;
+}
+
+// Sub-componente extraído e tipado
+const NavButton = ({ icon: Icon, id, activeTab, onClick, label, badgeCount }: NavButtonProps) => {
   const isActive = activeTab === id;
 
   return (
@@ -22,18 +32,26 @@ const NavButton = ({ icon: Icon, id, activeTab, onClick, label, badgeCount }) =>
       />
       
       {/* Badge de Notificação (Bolinha vermelha) */}
-      {badgeCount > 0 && !isActive && (
+      {(badgeCount || 0) > 0 && !isActive && (
         <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
       )}
     </button>
   );
 };
 
-export default function BottomMenu({ activeTab, setActiveTab, unreadCount }) {
-  // 2. Configuração limpa dos itens (Fácil de adicionar novos depois)
+// 2. Tipagem das props do Menu Principal
+interface BottomMenuProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  unreadCount: number;
+}
+
+export default function BottomMenu({ activeTab, setActiveTab, unreadCount }: BottomMenuProps) {
+  
+  // Array de configuração
   const menuItems = [
     { id: "home", icon: Battery, label: "Minha Energia" },
-    { id: "friends", icon: Users, label: "Amigos" }, // Troquei MessageCircle por Users (faz mais sentido)
+    { id: "friends", icon: Users, label: "Amigos" },
     { id: "insights", icon: BarChart2, label: "Relatórios" },
     { id: "notifications", icon: Bell, label: "Notificações", badge: unreadCount },
   ];
