@@ -2,6 +2,7 @@
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
+// Configuração da sua bateria-app
 const firebaseConfig = {
   apiKey: "AIzaSyBTe413MwOlYvh7KXlNyEyYm6lEpHw2_dE",
   authDomain: "bateria-app.firebaseapp.com",
@@ -12,14 +13,15 @@ const firebaseConfig = {
   measurementId: "G-9V0G6FD5L6",
 };
 
+// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Serviços
+// Inicializa os serviços
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 const githubProvider = new GithubAuthProvider();
 
-// Exportações
+// Exporta tudo tipado
 export { auth, db, googleProvider, githubProvider };
 export default app;

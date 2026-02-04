@@ -1,3 +1,38 @@
-﻿@tailwind base;
-@tailwind components;
-@tailwind utilities;
+﻿/* src/index.css */
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Garante que o app ocupe 100% da altura disponível e nada mais */
+  height: 100%;
+  overflow: hidden; /* <--- O SEGREDO: Impede a tela inteira de rolar */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  place-items: start; /* Mudado de center para start */
+  min-width: 320px;
+  min-height: 100%;
+  height: 100%; /* Força altura fixa */
+  width: 100%;
+
+  /* Remove o "bouncing" (efeito elástico) no iOS/Android */
+  overscroll-behavior: none;
+
+  /* Impede que o usuário selecione texto segurando o dedo (comportamento de app) */
+  user-select: none;
+  -webkit-user-select: none;
+
+  /* Remove highlight azul ao clicar em botões no Android */
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* Garante que o React também não vaze */
+}

@@ -29,16 +29,26 @@ import { BatterySlider, BottomMenu } from "../components";
 import FriendsView from "./FriendsView";
 import InsightsView from "./InsightsView";
 import { analyzeStatusSentiment } from "../utils/aiHelpers";
-import { UserData } from "../contexts/AuthContext"; // Importamos o tipo do Usuário
+import { UserData } from "../contexts/AuthContext";
 
-// 1. Definimos o que a HomePage precisa receber (Props)
+// --- NOVAS CONSTANTES: DRENOS E CARREGADORES ---
+const CONTEXT_TAGS = [
+  { id: "work", label: "Trabalho", emoji: "💼" },
+  { id: "study", label: "Estudos", emoji: "📚" },
+  { id: "social", label: "Social", emoji: "🥂" },
+  { id: "family", label: "Família", emoji: "🏠" },
+  { id: "rest", label: "Descanso", emoji: "🧘" },
+  { id: "traffic", label: "Trânsito", emoji: "🚗" },
+  { id: "gym", label: "Treino", emoji: "💪" },
+  { id: "love", label: "Love", emoji: "❤️" },
+];
+
 interface HomePageProps {
   user: UserData | null;
   initialLevel?: number;
   onLogout: () => void;
 }
 
-// 2. Definimos o tipo da sugestão da IA
 interface AiSuggestion {
   suggestedLevel: number;
   emoji: string;
@@ -57,8 +67,11 @@ export default function HomePage({
   // Estado Ghost Mode
   const [isGhostMode, setIsGhostMode] = useState(user?.isGhostMode || false);
 
-  // Estado da Sugestão da IA (Tipado com a interface acima)
+  // Estado da Sugestão da IA
   const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
+
+  // NOVO: Estado da Tag Selecionada
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const [rechargeTime, setRechargeTime] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -66,8 +79,6 @@ export default function HomePage({
     user?.userTag || null,
   );
 
-  // Prepara o objeto para o hook (TypeScript entende que user pode ser null)
-  // Se user existir, espalhamos as props e sobrescrevemos isGhostMode
   const userWithGhost: UserData | null = user ? { ...user, isGhostMode } : null;
 
   const { saveStatus } = useBatterySync(userWithGhost, batteryLevel);
@@ -75,7 +86,6 @@ export default function HomePage({
   const currentMode = getModeInfo(batteryLevel);
   const ModeIcon = currentMode.icon;
 
-  // Tipagem correta para o Timer
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -120,12 +130,45 @@ export default function HomePage({
     }
   };
 
-  // Tipagem do evento de mudança do input
+  // --- NOVO: LÓGICA DE CLIQUE NAS TAGS ---
+  const handleTagClick = async (tagId: string) => {
+    if (!user?.uid || isGhostMode) return;
+
+    // Se clicar na mesma tag, desmarca. Se for nova, marca.
+    const newTagId = selectedTag === tagId ? null : tagId;
+    setSelectedTag(newTagId);
+
+    const tagInfo = CONTEXT_TAGS.find((t) => t.id === tagId);
+
+    if (tagInfo) {
+      // Atualiza o texto visualmente na hora
+      const newStatus = `${tagInfo.emoji} ${tagInfo.label}`;
+      setStatusText(newStatus);
+
+      // Salva no Firestore
+      setIsSavingStatus(true);
+      try {
+        await updateDoc(doc(db, "users", user.uid), {
+          status: newStatus,
+          lastContextTag: tagInfo.label, // Para os insights futuros
+          lastContextEmoji: tagInfo.emoji,
+          lastUpdated: new Date(),
+        });
+        setIsSavingStatus(false);
+      } catch (error) {
+        console.error(error);
+        setIsSavingStatus(false);
+      }
+    }
+  };
+
   const handleStatusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
     setStatusText(text);
 
-    // --- CÉREBRO DA IA (NLP) ---
+    // Se o usuário digitar, desmarca as tags para não confundir
+    setSelectedTag(null);
+
     const suggestion = analyzeStatusSentiment(text);
 
     if (suggestion && Math.abs(suggestion.suggestedLevel - batteryLevel) > 15) {
@@ -177,7 +220,7 @@ export default function HomePage({
 
   return (
     <div
-      className={`min-h-screen font-sans flex flex-col relative w-full transition-colors duration-700 
+      className={`h-full overflow-hidden font-sans flex flex-col relative w-full transition-colors duration-700
         ${isGhostMode ? "bg-slate-200" : "bg-slate-50"}
     `}
     >
@@ -204,7 +247,6 @@ export default function HomePage({
                     </button>
                   )}
 
-                  {/* STATUS DE SALVAMENTO OU GHOST */}
                   <div className="h-5 flex items-center text-xs font-medium transition-all">
                     {isGhostMode ? (
                       <span className="text-slate-500 flex items-center gap-1 font-bold">
@@ -234,7 +276,6 @@ export default function HomePage({
                 </div>
               </div>
               <div className="flex gap-3 items-center">
-                {/* BOTÃO GHOST MODE */}
                 <button
                   onClick={toggleGhostMode}
                   className={`p-2 rounded-full shadow-sm transition-all active:scale-95 ${isGhostMode ? "bg-indigo-600 text-white shadow-indigo-300" : "bg-white text-slate-400 hover:text-indigo-500"}`}
@@ -268,7 +309,7 @@ export default function HomePage({
               </div>
             </div>
 
-            {/* CARD PRINCIPAL (GHOST EFFECT) */}
+            {/* CARD PRINCIPAL */}
             <div
               className={`rounded-3xl p-6 shadow-xl text-white transition-all duration-700 relative overflow-hidden
                 ${isGhostMode ? "bg-slate-400 grayscale" : `bg-gradient-to-br ${currentMode.accent}`}
@@ -325,6 +366,34 @@ export default function HomePage({
               </p>
             </div>
 
+            {/* --- NOVO: SEÇÃO DE TAGS (DRENOS E CARREGADORES) --- */}
+            <div className="px-2">
+              <p className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide text-center">
+                O que está rolando?
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 mb-4">
+                {CONTEXT_TAGS.map((tag) => (
+                  <button
+                    key={tag.id}
+                    disabled={isGhostMode}
+                    onClick={() => handleTagClick(tag.id)}
+                    className={`
+                                 px-3 py-1.5 rounded-full text-xs font-bold border transition-all active:scale-95 flex items-center gap-1.5
+                                 ${isGhostMode ? "opacity-50 cursor-not-allowed border-slate-200 bg-slate-100" : ""}
+                                 ${
+                                   selectedTag === tag.id && !isGhostMode
+                                     ? "bg-indigo-600 text-white border-indigo-600 shadow-md scale-105"
+                                     : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300"
+                                 }
+                             `}
+                  >
+                    <span>{tag.emoji}</span>
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* STATUS / NOTES COM SUGESTÃO IA */}
             <div className="relative mx-2">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
@@ -333,7 +402,7 @@ export default function HomePage({
               <input
                 type="text"
                 maxLength={60}
-                placeholder="O que está acontecendo? (Ex: Estudando 📚)"
+                placeholder="Ou digite algo... (Ex: Estudando 📚)"
                 value={statusText}
                 onChange={handleStatusChange}
                 disabled={isGhostMode}
@@ -342,7 +411,6 @@ export default function HomePage({
                     `}
               />
 
-              {/* --- BOTÃO MÁGICO DA IA (POP-UP) --- */}
               {aiSuggestion && !isGhostMode && (
                 <div className="absolute -top-12 left-0 right-0 flex justify-center animate-in slide-in-from-bottom-2 z-20">
                   <button
