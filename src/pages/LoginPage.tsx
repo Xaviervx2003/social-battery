@@ -1,16 +1,11 @@
 import React, { useState } from "react";
-import {
-  signInWithPopup,
-  GoogleAuthProvider,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-} from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
-import { auth, db } from "../firebaseConfig";
+import { useAuth } from "../contexts/AuthContext"; // Usa nosso contexto inteligente
 import { Battery, Loader2, Mail, Lock, User, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
+  // Puxamos as funções prontas do contexto
+  const { loginGoogle, loginEmail, registerEmail } = useAuth();
+
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,34 +16,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError("");
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // Verifica se o usuário já existe no Firestore
-      const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        const generatedTag = Math.floor(1000 + Math.random() * 9000).toString();
-        // Cria documento inicial se for novo usuário
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          searchName: user.displayName ? user.displayName.toLowerCase() : "",
-          photoURL: user.photoURL,
-          userTag: generatedTag,
-          currentBattery: 50,
-          status: "Novo por aqui! 👋",
-          lastLogin: new Date(),
-        });
-      }
+      // O Contexto já sabe se é Android (Plugin Nativo) ou Web (Popup)
+      await loginGoogle();
+      // Não precisa redirecionar, o App.tsx detecta o login sozinho
     } catch (err: any) {
       console.error(err);
-      setError("Erro ao conectar com Google.");
-    } finally {
+      setError("Erro ao conectar com Google. Verifique sua conexão.");
       setLoading(false);
     }
   };
@@ -61,33 +35,11 @@ export default function LoginPage() {
     try {
       if (isLogin) {
         // LOGIN
-        await signInWithEmailAndPassword(auth, email, password);
+        await loginEmail(email, password);
       } else {
         // CADASTRO
-        if (!name) {
-          throw new Error("Nome é obrigatório.");
-        }
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password,
-        );
-        const user = userCredential.user;
-        const generatedTag = Math.floor(1000 + Math.random() * 9000).toString();
-
-        await updateProfile(user, { displayName: name });
-
-        await setDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: name,
-          searchName: name.toLowerCase(),
-          photoURL: null,
-          userTag: generatedTag,
-          currentBattery: 50,
-          status: "Novo por aqui! 👋",
-          lastLogin: new Date(),
-        });
+        if (!name) throw new Error("Nome é obrigatório.");
+        await registerEmail(name, email, password);
       }
     } catch (err: any) {
       console.error(err);
@@ -98,7 +50,7 @@ export default function LoginPage() {
       else if (err.code === "auth/weak-password")
         setError("A senha deve ter pelo menos 6 caracteres.");
       else setError(err.message || "Ocorreu um erro. Tente novamente.");
-    } finally {
+
       setLoading(false);
     }
   };
@@ -207,7 +159,7 @@ export default function LoginPage() {
           className="w-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95"
         >
           <img
-            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+            src="https://www.svgrepo.com/show/475656/google-color.svg"
             className="w-5 h-5"
             alt="Google"
           />

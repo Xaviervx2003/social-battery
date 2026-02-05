@@ -1,69 +1,75 @@
 import { useState, useEffect, useRef } from "react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import { UserData } from "../contexts/AuthContext";
+import { Preferences } from "@capacitor/preferences"; // <--- IMPORTANTE
 
-// 1. Definimos os status permitidos (Union Type)
-type SaveStatus = "saved" | "waiting" | "saving" | "error";
+type SaveStatus = "idle" | "waiting" | "saving" | "saved" | "error";
 
 export function useBatterySync(user: UserData | null, batteryLevel: number) {
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
-
-  // 2. Tipagem correta para o setTimeout no React/TS
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedLevel = useRef<number | null>(null);
 
-  // 3. Tipagem para o valor salvo (número ou null)
-  const lastSavedValue = useRef<number | null>(user?.currentBattery ?? null);
+  // Carrega o valor salvo localmente ao iniciar (para ficar rápido)
+  useEffect(() => {
+    const loadLocal = async () => {
+      const { value } = await Preferences.get({ key: "widget_battery_level" });
+      if (value && lastSavedLevel.current === null) {
+        // Opcional: Você poderia usar isso para setar o estado inicial
+        console.log("Bateria recuperada do disco:", value);
+      }
+    };
+    loadLocal();
+  }, []);
 
   useEffect(() => {
-    // Validações básicas
-    if (!user?.uid) return;
+    if (!user?.uid || user.isGhostMode) return;
 
-    // --- LÓGICA DO MODO FANTASMA ---
-    if (user.isGhostMode) {
-      setSaveStatus("saved");
-      return;
+    // 1. SALVA LOCALMENTE PARA O WIDGET LER (INSTANTÂNEO)
+    Preferences.set({
+      key: "widget_battery_level",
+      value: batteryLevel.toString(),
+    });
+
+    // Lógica de Debounce do Firebase (Mantida igual)
+    if (
+      saveStatus === "idle" ||
+      saveStatus === "saved" ||
+      saveStatus === "error"
+    ) {
+      setSaveStatus("waiting");
     }
 
-    // Se o valor atual for igual ao último salvo, não faz nada
-    if (batteryLevel === lastSavedValue.current) {
-      setSaveStatus("saved");
-      return;
-    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // Mudou? Então está "pendente"
-    setSaveStatus("waiting");
-
-    // Limpa o timer anterior (Debounce)
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    // Cria o novo timer
     timeoutRef.current = setTimeout(async () => {
+      if (lastSavedLevel.current === batteryLevel) {
+        setSaveStatus("saved");
+        return;
+      }
+
+      setSaveStatus("saving");
       try {
-        setSaveStatus("saving");
-
-        const userRef = doc(db, "users", user.uid);
-
-        await updateDoc(userRef, {
-          currentBattery: batteryLevel,
+        await updateDoc(doc(db, "users", user.uid), {
+          batteryLevel: batteryLevel,
           lastUpdated: new Date(),
         });
-
-        // Sucesso
-        lastSavedValue.current = batteryLevel;
+        lastSavedLevel.current = batteryLevel;
         setSaveStatus("saved");
+
+        // Volta para 'idle' depois de um tempo para sumir o ícone
+        setTimeout(() => setSaveStatus("idle"), 2000);
       } catch (error) {
-        console.error("Erro ao sincronizar bateria:", error);
+        console.error("Erro ao salvar bateria:", error);
         setSaveStatus("error");
       }
-    }, 2000); // 2 segundos
+    }, 2000); // 2 segundos de espera
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [batteryLevel, user]);
+  }, [batteryLevel, user, saveStatus]);
 
   return { saveStatus };
 }
