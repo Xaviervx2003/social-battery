@@ -120,6 +120,13 @@ export default function NotificationsView({
   // --- ENVIAR RESPOSTA ---
   const handleSendReply = async () => {
     if (!replyTarget || !currentUser) return;
+
+    // 👇 TRAVA DE SEGURANÇA: Impede envio de textos gigantes
+    if (messageText.length > 140) {
+      alert("Texto muito grande! Máximo 140 caracteres.");
+      return;
+    }
+
     setSendingState("sending");
 
     try {
@@ -229,23 +236,23 @@ export default function NotificationsView({
                 )}
               </div>
 
-              <div className="flex-1">
-                <p className="font-bold text-slate-800 text-sm mb-0.5">
+              <div className="flex-1 overflow-hidden">
+                {" "}
+                {/* Adicionado overflow-hidden */}
+                <p className="font-bold text-slate-800 text-sm mb-0.5 truncate">
                   {notif.fromName || "Alguém"}
                 </p>
-                <p className="text-sm text-slate-600 leading-snug">
+                {/* 👇 AQUI ESTÁ A CORREÇÃO VISUAL PARA TEXTOS GRANDES */}
+                <p className="text-sm text-slate-600 leading-snug break-words whitespace-pre-wrap">
                   {notif.message}
                 </p>
-
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-[10px] text-slate-400 font-medium">
                     {notif.timestamp?.toDate
-                      ? notif.timestamp
-                          .toDate()
-                          .toLocaleTimeString("pt-BR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                      ? notif.timestamp.toDate().toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                       : "Agora"}
                   </p>
                   {notif.type === "energy" && (
@@ -327,8 +334,9 @@ export default function NotificationsView({
             ) : (
               <>
                 <div className="relative mb-4">
+                  {/* Adicionado break-words aqui também para garantir */}
                   <textarea
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:outline-indigo-500 min-h-[100px] resize-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:outline-indigo-500 min-h-[100px] resize-none break-words"
                     placeholder="Escreva sua resposta..."
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}

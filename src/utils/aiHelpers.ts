@@ -9,7 +9,7 @@ interface SentimentResult {
 
 interface BatteryLog {
   level: number;
-  timestamp: any; // Pode ser Timestamp do Firebase ou Date
+  timestamp: any;
 }
 
 interface BurnoutPrediction {
@@ -18,19 +18,18 @@ interface BurnoutPrediction {
   message: string;
 }
 
-interface FriendData {
+export interface FriendData {
   finalBattery?: number;
   streak?: number;
 }
 
-// 1. NLP SIMPLES (Análise de Sentimento baseada em palavras-chave)
+// 1. NLP SIMPLES (Análise de Sentimento)
 export const analyzeStatusSentiment = (
   text: string,
 ): SentimentResult | null => {
   if (!text) return null;
   const lower = text.toLowerCase();
 
-  // Dicionário de Sentimentos
   const patterns = [
     {
       keywords: [
@@ -65,6 +64,11 @@ export const analyzeStatusSentiment = (
       emoji: "📚",
     },
     {
+      keywords: ["feliz", "bem", "tranquilo", "paz", "zen", "de boa"],
+      level: 75,
+      emoji: "😌",
+    },
+    {
       keywords: ["academia", "treino", "gym", "correr", "crossfit"],
       level: 85,
       emoji: "💪",
@@ -73,11 +77,6 @@ export const analyzeStatusSentiment = (
       keywords: ["festa", "rolê", "beber", "saindo", "sextou", "animado"],
       level: 100,
       emoji: "🎉",
-    },
-    {
-      keywords: ["feliz", "bem", "tranquilo", "paz", "zen", "de boa"],
-      level: 75,
-      emoji: "😌",
     },
   ];
 
@@ -89,14 +88,12 @@ export const analyzeStatusSentiment = (
   return null;
 };
 
-// 2. PREVISÃO DE BURNOUT (Análise de Padrões)
+// 2. PREVISÃO DE BURNOUT (Corrigida)
 export const predictBurnout = (
   logs: BatteryLog[],
 ): BurnoutPrediction | null => {
-  if (!logs || logs.length < 5) return null; // Precisa de dados mínimos
+  if (!logs || logs.length < 5) return null;
 
-  // Agrupar médias por dia da semana (0 = Domingo, 1 = Segunda...)
-  // Tipagem explícita para o objeto de dias
   const days: { [key: number]: number[] } = {
     0: [],
     1: [],
@@ -107,27 +104,24 @@ export const predictBurnout = (
     6: [],
   };
   const dayNames = [
-    "Domingo",
-    "Segunda",
-    "Terça",
-    "Quarta",
-    "Quinta",
-    "Sexta",
-    "Sábado",
+    "Domingos",
+    "Segundas",
+    "Terças",
+    "Quartas",
+    "Quintas",
+    "Sextas",
+    "Sábados",
   ];
 
   logs.forEach((log) => {
-    // Verifica se é Timestamp do Firebase (tem toDate) ou Date normal
     if (log.timestamp) {
       const date = log.timestamp.toDate
         ? log.timestamp.toDate()
         : new Date(log.timestamp);
-      const day = date.getDay(); // 0-6
-      days[day].push(log.level);
+      days[date.getDay()].push(log.level);
     }
   });
 
-  // Encontrar o pior dia
   let worstDay: number | null = null;
   let lowestAvg = 100;
 
@@ -135,12 +129,9 @@ export const predictBurnout = (
     if (days[i].length > 0) {
       const sum = days[i].reduce((a, b) => a + b, 0);
       const avg = sum / days[i].length;
-      if (avg < 35) {
-        // Limite de alerta (Bateria vermelha/laranja)
-        if (avg < lowestAvg) {
-          lowestAvg = avg;
-          worstDay = i;
-        }
+      if (avg < 35 && avg < lowestAvg) {
+        lowestAvg = avg;
+        worstDay = i;
       }
     }
   }
@@ -149,19 +140,25 @@ export const predictBurnout = (
     return {
       day: dayNames[worstDay],
       avg: Math.round(lowestAvg),
-      message: `Alerta: Suas terças-feiras costumam ser pesadas (${Math.round(lowestAvg)}%). Planeje um descanso!`,
+      // 👇 CORREÇÃO: Agora usa o nome do dia dinamicamente
+      message: `Alerta: Seus(uas) ${dayNames[worstDay]} costumam ser pesados(as) (${Math.round(lowestAvg)}%). Planeje um descanso!`,
     };
   }
   return null;
 };
 
-// 3. SMART SORT (Score de Relevância)
+// 3. SMART SORT (Score de Relevância Ajustado)
 export const calculateRelevanceScore = (friend: FriendData): number => {
-  // Fator 1: Urgência (Bateria Baixa vale MAIS pontos de atenção)
-  const urgencyScore = 100 - (friend.finalBattery || 0);
+  const battery = friend.finalBattery ?? 0;
 
-  // Fator 2: Intimidade (Streak vale pontos multiplicados)
-  const intimacyScore = (friend.streak || 0) * 10;
+  // Fator 1: Urgência (Quanto menor a bateria, mais pontos)
+  // Ex: Bateria 10% -> 90 pontos | Bateria 100% -> 0 pontos
+  const urgencyScore = 100 - battery;
+
+  // Fator 2: Intimidade (Cada dia de streak vale 5 pontos extra)
+  // Reduzi para 5 para equilibrar (10 era muito forte)
+  const streak = friend.streak || 0;
+  const intimacyScore = streak * 5;
 
   return urgencyScore + intimacyScore;
 };

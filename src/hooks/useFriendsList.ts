@@ -8,8 +8,9 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import { UserData } from "../contexts/AuthContext";
-// Importamos a interface Friend do novo componente para manter consistência
 import { Friend } from "../components/friends/FriendItem";
+// 👇 Importamos a função de cálculo centralizada
+import { calculateRelevanceScore } from "../utils/aiHelpers";
 
 export function useFriendsList(currentUser: UserData | null) {
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -73,10 +74,9 @@ export function useFriendsList(currentUser: UserData | null) {
           });
         });
 
+        // 👇 AQUI A MÁGICA: Usamos a IA para ordenar
         friendsData.sort((a, b) => {
-          const scoreA = 100 - a.finalBattery + (a.streak || 0) * 5;
-          const scoreB = 100 - b.finalBattery + (b.streak || 0) * 5;
-          return scoreB - scoreA;
+          return calculateRelevanceScore(b) - calculateRelevanceScore(a);
         });
 
         setFriends(friendsData);

@@ -23,6 +23,7 @@ import {
   Bell,
   Zap,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { UserData } from "../contexts/AuthContext";
 import { Preferences } from "@capacitor/preferences";
@@ -43,6 +44,29 @@ interface FriendRequest {
 interface FriendsViewProps {
   currentUser: UserData | null;
 }
+
+// Função auxiliar para calcular o novo Streak
+const calculateNewStreak = (currentStreak: number, lastDate: any) => {
+  // Se nunca interagiu, começa o streak agora (1)
+  if (!lastDate) return 1;
+
+  const now = new Date();
+  // Converte Timestamp do Firebase para Date JS, se necessário
+  const last = lastDate.toDate ? lastDate.toDate() : new Date(lastDate);
+
+  // Zera as horas para comparar apenas os dias (Meia-noite)
+  now.setHours(0, 0, 0, 0);
+  last.setHours(0, 0, 0, 0);
+
+  // Diferença em milissegundos
+  const diffTime = Math.abs(now.getTime() - last.getTime());
+  // Converte para dias (1 dia = 1000ms * 60s * 60m * 24h)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return currentStreak; // Já interagiu hoje, mantém
+  if (diffDays === 1) return currentStreak + 1; // Interagiu ontem, aumenta 🔥
+  return 1; // Passou mais de 1 dia, quebrou o streak (Recomeça em 1) 😢
+};
 
 export default function FriendsView({ currentUser }: FriendsViewProps) {
   const [view, setView] = useState<"list" | "search" | "requests">("list");
@@ -197,21 +221,50 @@ export default function FriendsView({ currentUser }: FriendsViewProps) {
   };
 
   const handleSendMessage = async () => {
+    // Verifica se tem dados do amigo e do usuário logado
     if (!modalState.data || !currentUser) return;
+    if (messageText.length > 140) {
+      // Limite tipo Twitter antigo
+      showToast("Texto muito grande! Máximo 140 caracteres.", "error");
+      return; // Para tudo aqui
+    }
     setActionStatus("loading");
+
     try {
+      // 1. Envia a Notificação (Como já fazia antes)
+      const finalMessage =
+        messageText.trim() || "te mandou um raio de energia! ⚡";
+
       await addDoc(collection(db, "notifications"), {
         from: currentUser.uid,
         fromName: currentUser.displayName,
         to: modalState.data.uid,
         type: "energy",
-        message: messageText.trim() || "te mandou um raio de energia! ⚡",
+        message: finalMessage,
         read: false,
         timestamp: new Date(),
       });
+
+      // 2. Atualiza o Streak e Última Interação no documento da Amizade
+      if (modalState.data.requestId) {
+        // Calcula o novo valor do foguinho
+        const newStreak = calculateNewStreak(
+          modalState.data.streak || 0,
+          modalState.data.lastInteraction,
+        );
+
+        await updateDoc(doc(db, "friend_requests", modalState.data.requestId), {
+          lastInteraction: new Date(), // Atualiza a data para "Agora"
+          streak: newStreak, // Salva o novo foguinho
+        });
+      }
+
       setActionStatus("success");
-      setTimeout(() => setModalState({ type: null, data: null }), 1500);
-    } catch {
+      setTimeout(() => {
+        setModalState({ type: null, data: null });
+      }, 1500);
+    } catch (err) {
+      console.error("Erro ao enviar:", err);
       setActionStatus("idle");
     }
   };
@@ -231,12 +284,13 @@ export default function FriendsView({ currentUser }: FriendsViewProps) {
     <div className="p-4 space-y-4 pb-24 min-h-screen bg-slate-50 relative">
       {notification && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${notification.type === "error" ? "bg-red-500 text-white" : "bg-slate-800 text-white"}`}
+          // 👇 AQUI ESTÁ A CORREÇÃO: max-w, text-center e break-words
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 max-w-[90vw] text-center break-words ${notification.type === "error" ? "bg-red-500 text-white" : "bg-slate-800 text-white"}`}
         >
           {notification.type === "success" ? (
-            <Check size={16} />
+            <Check size={16} className="shrink-0" /> // shrink-0 impede o ícone de esmagar
           ) : (
-            <AlertCircle size={16} />
+            <AlertTriangle size={16} className="shrink-0" />
           )}{" "}
           {notification.message}
         </div>
@@ -386,7 +440,7 @@ export default function FriendsView({ currentUser }: FriendsViewProps) {
             ) : (
               <>
                 <textarea
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4 resize-none h-32"
                   placeholder="Sua mensagem..."
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
