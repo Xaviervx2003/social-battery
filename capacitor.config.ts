@@ -2,7 +2,7 @@ import { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.bateria.app",
-  appName: "social-battery",
+  appName: "Social Battery",
   webDir: "dist",
   server: {
     androidScheme: "https",
@@ -10,9 +10,8 @@ const config: CapacitorConfig = {
   plugins: {
     GoogleAuth: {
       scopes: ["profile", "email"],
-      // COLE SEU CLIENT ID AQUI ABAIXO (MANTENHA AS ASPAS)
       serverClientId:
-        "990994147026-grnttkd1j4bc10rpbaprb9rd05hoplou.apps.googleusercontent.com",
+        "20810139231-jf4mqi179q2ptdn138mgsig04m7s7a4k.apps.googleusercontent.com",
       forceCodeForRefreshToken: true,
     },
   },

@@ -1,8 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">social-battery</string>
-    <string name="title_activity_main">social-battery</string>
+    <string name="app_name">Social Battery</string>
+    <string name="title_activity_main">Social Battery</string>
     <string name="package_name">com.bateria.app</string>
     <string name="custom_url_scheme">com.bateria.app</string>
-    <string name="server_client_id">1:990994147026:web:5b4dc4db5606c5237def0b</string>
+
+    <string name="server_client_id">20810139231-jf4mqi179q2ptdn138mgsig04m7s7a4k.apps.googleusercontent.com</string>
 </resources>

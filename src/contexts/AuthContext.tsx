@@ -20,38 +20,39 @@ import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
 import { Capacitor } from "@capacitor/core";
 
-// 1. Definimos a "Cara" do nosso Usuário
+// 1. Definimos a "Cara" do nosso Usuário (ATUALIZADO)
 export interface UserData {
   uid: string;
   email: string | null;
   photoURL: string | null;
   displayName: string;
-  searchName: string; // Importante para a busca funcionar
+  searchName: string;
   userTag: string;
-  currentBattery: number;
+
+  // 👇 AQUI ESTAVA O ERRO: Adicionamos o batteryLevel oficial
+  batteryLevel: number;
+  currentBattery?: number; // Mantemos o antigo como opcional (?) para não quebrar dados velhos
+
   status: string;
   isGhostMode: boolean;
   lastLogin: Date;
-  fcmToken?: string; // Para notificações push
+  fcmToken?: string;
 }
 
-// 2. Definimos o que o Contexto exporta (Funções novas adicionadas)
+// 2. Definimos o que o Contexto exporta
 interface AuthContextType {
   user: UserData | null;
   loading: boolean;
-  // Métodos de Login
   loginGoogle: () => Promise<void>;
   loginEmail: (email: string, pass: string) => Promise<void>;
   registerEmail: (name: string, email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
-  // Métodos de Dados
   toggleGhostMode: () => Promise<void>;
   updateBattery: (level: number) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Hook personalizado
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -60,27 +61,49 @@ export function useAuth() {
   return context;
 }
 
-// Provider
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Escuta o Auth do Firebase
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // --- MUDANÇA IMPORTANTE: onSnapshot em vez de getDoc ---
-        // Isso garante que se você mudar a bateria em outro lugar, atualiza aqui na hora
         const userRef = doc(db, "users", currentUser.uid);
 
+        // Escuta em tempo real o próprio perfil
         const unsubFirestore = onSnapshot(
           userRef,
           async (docSnap) => {
             if (docSnap.exists()) {
-              // Usuário já existe no banco, atualiza o estado local
-              setUser({ uid: currentUser.uid, ...docSnap.data() } as UserData);
+              const data = docSnap.data();
+
+              // Normaliza os dados (garante que batteryLevel exista)
+              // Se batteryLevel não existir, tenta pegar do antigo currentBattery, senão usa 65
+              const actualLevel =
+                data.batteryLevel ?? data.currentBattery ?? 65;
+
+              const safeUser: UserData = {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                photoURL: currentUser.photoURL,
+                displayName: data.displayName || "Usuário",
+                searchName: data.searchName || "",
+                userTag: data.userTag || "0000",
+                status: data.status || "",
+                isGhostMode: data.isGhostMode || false,
+                lastLogin: data.lastLogin?.toDate
+                  ? data.lastLogin.toDate()
+                  : new Date(),
+
+                // ✅ Atualizado aqui
+                batteryLevel: actualLevel,
+                currentBattery: data.currentBattery,
+                fcmToken: data.fcmToken,
+              };
+
+              setUser(safeUser);
             } else {
-              // Primeiro acesso (Novo Usuário): Cria o documento padrão
+              // Criação de Novo Usuário (Primeiro Login)
               const finalName = currentUser.displayName || "Usuário";
               const newTag = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -91,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 displayName: finalName,
                 searchName: finalName.toLowerCase(),
                 userTag: newTag,
-                currentBattery: 65, // Começa com carga média
+                batteryLevel: 65, // ✅ Começa com o novo padrão
                 status: "",
                 isGhostMode: false,
                 lastLogin: new Date(),
@@ -122,14 +145,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginGoogle = async () => {
     try {
       if (Capacitor.isNativePlatform()) {
-        // Lógica nativa (Android)
         const googleUser = await GoogleAuth.signIn();
         const credential = GoogleAuthProvider.credential(
           googleUser.authentication.idToken,
         );
         await signInWithCredential(auth, credential);
       } else {
-        // Lógica web (Popup)
         await signInWithPopup(auth, googleProvider);
       }
     } catch (error) {
@@ -143,11 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const registerEmail = async (name: string, email: string, pass: string) => {
-    // Cria conta no Auth
     const res = await createUserWithEmailAndPassword(auth, email, pass);
-    // Atualiza nome no perfil Auth
     await updateProfile(res.user, { displayName: name });
-    // O onAuthStateChanged vai capturar e criar o doc no Firestore automaticamente
   };
 
   const logout = async () => {
@@ -161,7 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const toggleGhostMode = async () => {
     if (!user) return;
     const newState = !user.isGhostMode;
-    // O onSnapshot vai atualizar o estado local automaticamente
     await setDoc(
       doc(db, "users", user.uid),
       { isGhostMode: newState },
@@ -174,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await setDoc(
       doc(db, "users", user.uid),
       {
-        currentBattery: level,
+        batteryLevel: level, // ✅ Salva no campo certo
         lastLogin: new Date(),
       },
       { merge: true },
