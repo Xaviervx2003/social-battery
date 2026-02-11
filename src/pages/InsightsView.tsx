@@ -28,7 +28,7 @@ import {
   where,
   orderBy,
   getDocs,
-  Timestamp,
+  // Timestamp removido daqui pois não é usado
 } from "firebase/firestore";
 import { predictBurnout } from "../utils/aiHelpers";
 import { UserData } from "../contexts/AuthContext";
@@ -84,7 +84,7 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
 
   const userId = currentUser?.uid;
   const COLORS = ["#ef4444", "#f59e0b", "#10b981", "#8b5cf6"];
-  const CACHE_KEY = `battery_history_${userId}_${timeRange}`; // Chave única por usuário e filtro
+  const CACHE_KEY = `battery_history_${userId}_${timeRange}`;
 
   // --- FUNÇÕES AUXILIARES ---
 
@@ -128,10 +128,8 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
       else moods.Super++;
     });
 
-    // Atualiza Gráficos
     setData(rawData);
 
-    // Atualiza Pizza
     const pieData: MoodDataItem[] = [
       { name: "💀 Morto", value: moods.Esgotado },
       { name: "😐 Meh", value: moods.Baixo },
@@ -140,15 +138,12 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
     ].filter((item) => item.value > 0);
     setMoodData(pieData);
 
-    // Atualiza AI Burnout
-    // Convertemos de volta para Date para a IA entender os dias da semana
     const dataForAI = rawData.map((d) => ({
       level: d.level,
       timestamp: new Date(d.rawDate),
     }));
     setBurnoutAlert(predictBurnout(dataForAI));
 
-    // Atualiza Stats
     if (rawData.length > 0) {
       const calculatedAvg = Math.round(total / rawData.length);
       setStats({ avg: calculatedAvg, max, min });
@@ -167,19 +162,18 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
 
     setLoading(true);
 
-    // 1. TENTA CARREGAR DO CACHE PRIMEIRO (OFFLINE FIRST)
+    // 1. CACHE LOCAL
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
-      console.log("Carregando do Cache Local...");
       try {
         const parsedData = JSON.parse(cached);
-        processData(parsedData); // Mostra dados antigos na hora!
+        processData(parsedData);
       } catch (e) {
         console.error("Erro ao ler cache", e);
       }
     }
 
-    // 2. BUSCA DADOS FRESCOS NO FIREBASE
+    // 2. FIREBASE
     try {
       const now = new Date();
       let startDate = new Date();
@@ -227,31 +221,19 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
           fullLabel: date.toLocaleString("pt-BR"),
           shortLabel: label,
           level: item.level,
-          timestamp: date, // Objeto Date para uso interno
-          rawDate: date.toISOString(), // String ISO para salvar no JSON
+          timestamp: date,
+          rawDate: date.toISOString(),
         });
       });
 
-      // Se achou dados novos, atualiza a tela E o cache
       if (historyData.length > 0) {
         processData(historyData);
-        // Salva no Cache Local
         localStorage.setItem(CACHE_KEY, JSON.stringify(historyData));
       } else if (!cached) {
-        // Se não tem dados nem cache, limpa tudo
         setData([]);
       }
     } catch (error: any) {
       console.error("Erro ao buscar histórico:", error);
-      // 🔥 DICA DE OURO: Verifica se é erro de Índice
-      if (
-        error.code === "failed-precondition" ||
-        error.message?.includes("index")
-      ) {
-        console.log(
-          "⚠️ FALTANDO ÍNDICE NO FIREBASE! OLHE O CONSOLE DO NAVEGADOR PARA O LINK.",
-        );
-      }
     } finally {
       setLoading(false);
     }
@@ -308,7 +290,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </header>
 
-      {/* --- ALERTA DE BURNOUT --- */}
       {burnoutAlert && (
         <div className="mx-2 bg-red-50 border border-red-100 p-4 rounded-2xl flex items-start gap-3 animate-pulse shadow-sm">
           <div className="bg-red-100 p-2 rounded-full text-red-500 mt-1">
@@ -325,7 +306,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       )}
 
-      {/* VIBE CHECK */}
       <div className="bg-white p-5 rounded-3xl border border-indigo-50 shadow-sm shadow-indigo-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-50 rounded-bl-full -mr-4 -mt-4 opacity-50"></div>
         <div className="flex items-start gap-4 relative z-10">
@@ -345,7 +325,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </div>
 
-      {/* STATS */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
           <span className="text-2xl font-black text-indigo-600">
@@ -373,7 +352,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </div>
 
-      {/* GRÁFICO PRINCIPAL */}
       <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
         <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2 text-sm">
           <Zap size={16} className="text-yellow-500 fill-yellow-500" />
@@ -443,7 +421,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </div>
 
-      {/* PIZZA */}
       {moodData.length > 0 && (
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div className="w-1/2 relative h-32">
@@ -459,7 +436,7 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
                   dataKey="value"
                   cornerRadius={6}
                 >
-                  {moodData.map((entry, index) => (
+                  {moodData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
