@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -33,8 +33,7 @@ import {
 import { predictBurnout } from "../utils/aiHelpers";
 import { UserData } from "../contexts/AuthContext";
 
-// --- INTERFACES (Contratos de Dados) ---
-
+// --- INTERFACES ---
 interface InsightsViewProps {
   currentUser: UserData | null;
 }
@@ -43,8 +42,8 @@ interface ChartData {
   fullLabel: string;
   shortLabel: string;
   level: number;
-  timestamp: Date | Timestamp;
-  rawDate: Date;
+  timestamp: any; // Pode vir como String do cache ou Timestamp do Firebase
+  rawDate: string; // Salvamos como string ISO para o cache não quebrar
 }
 
 interface MoodDataItem {
@@ -63,7 +62,6 @@ interface VibeAnalysis {
   color: string;
 }
 
-// Tipo do retorno da IA de Burnout (baseado no utils/aiHelpers)
 interface BurnoutPrediction {
   day: string;
   avg: number;
@@ -80,14 +78,15 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
     text: "Carregando...",
     color: "text-slate-400",
   });
-
   const [burnoutAlert, setBurnoutAlert] = useState<BurnoutPrediction | null>(
     null,
   );
 
   const userId = currentUser?.uid;
-
   const COLORS = ["#ef4444", "#f59e0b", "#10b981", "#8b5cf6"];
+  const CACHE_KEY = `battery_history_${userId}_${timeRange}`; // Chave única por usuário e filtro
+
+  // --- FUNÇÕES AUXILIARES ---
 
   const analyzeVibe = (avg: number): VibeAnalysis => {
     if (avg === 0)
@@ -112,6 +111,54 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
     };
   };
 
+  const processData = (rawData: ChartData[]) => {
+    let total = 0;
+    let max = 0;
+    let min = 100;
+    let moods = { Esgotado: 0, Baixo: 0, Bem: 0, Super: 0 };
+
+    rawData.forEach((item) => {
+      total += item.level;
+      if (item.level > max) max = item.level;
+      if (item.level < min) min = item.level;
+
+      if (item.level <= 20) moods.Esgotado++;
+      else if (item.level <= 50) moods.Baixo++;
+      else if (item.level <= 80) moods.Bem++;
+      else moods.Super++;
+    });
+
+    // Atualiza Gráficos
+    setData(rawData);
+
+    // Atualiza Pizza
+    const pieData: MoodDataItem[] = [
+      { name: "💀 Morto", value: moods.Esgotado },
+      { name: "😐 Meh", value: moods.Baixo },
+      { name: "🙂 Suave", value: moods.Bem },
+      { name: "🤩 Hype", value: moods.Super },
+    ].filter((item) => item.value > 0);
+    setMoodData(pieData);
+
+    // Atualiza AI Burnout
+    // Convertemos de volta para Date para a IA entender os dias da semana
+    const dataForAI = rawData.map((d) => ({
+      level: d.level,
+      timestamp: new Date(d.rawDate),
+    }));
+    setBurnoutAlert(predictBurnout(dataForAI));
+
+    // Atualiza Stats
+    if (rawData.length > 0) {
+      const calculatedAvg = Math.round(total / rawData.length);
+      setStats({ avg: calculatedAvg, max, min });
+      setVibeAnalysis(analyzeVibe(calculatedAvg));
+    } else {
+      setStats({ avg: 0, max: 0, min: 0 });
+      setVibeAnalysis(analyzeVibe(0));
+    }
+  };
+
   const fetchHistory = async () => {
     if (!userId) {
       setLoading(false);
@@ -119,6 +166,20 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
     }
 
     setLoading(true);
+
+    // 1. TENTA CARREGAR DO CACHE PRIMEIRO (OFFLINE FIRST)
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      console.log("Carregando do Cache Local...");
+      try {
+        const parsedData = JSON.parse(cached);
+        processData(parsedData); // Mostra dados antigos na hora!
+      } catch (e) {
+        console.error("Erro ao ler cache", e);
+      }
+    }
+
+    // 2. BUSCA DADOS FRESCOS NO FIREBASE
     try {
       const now = new Date();
       let startDate = new Date();
@@ -141,14 +202,8 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
       const querySnapshot = await getDocs(q);
       const historyData: ChartData[] = [];
 
-      let total = 0;
-      let max = 0;
-      let min = 100;
-      let moods = { Esgotado: 0, Baixo: 0, Bem: 0, Super: 0 };
-
       querySnapshot.forEach((doc) => {
         const item = doc.data();
-        // Verificação de segurança se timestamp existe
         if (!item.timestamp) return;
 
         const date = item.timestamp.toDate
@@ -172,47 +227,31 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
           fullLabel: date.toLocaleString("pt-BR"),
           shortLabel: label,
           level: item.level,
-          timestamp: item.timestamp,
-          rawDate: date,
+          timestamp: date, // Objeto Date para uso interno
+          rawDate: date.toISOString(), // String ISO para salvar no JSON
         });
-
-        total += item.level;
-        if (item.level > max) max = item.level;
-        if (item.level < min) min = item.level;
-
-        if (item.level <= 20) moods.Esgotado++;
-        else if (item.level <= 50) moods.Baixo++;
-        else if (item.level <= 80) moods.Bem++;
-        else moods.Super++;
       });
 
-      setData(historyData);
-
-      const pieData: MoodDataItem[] = [
-        { name: "💀 Morto", value: moods.Esgotado },
-        { name: "😐 Meh", value: moods.Baixo },
-        { name: "🙂 Suave", value: moods.Bem },
-        { name: "🤩 Hype", value: moods.Super },
-      ].filter((item) => item.value > 0);
-
-      setMoodData(pieData);
-
-      // --- INTEGRAÇÃO DA IA DE BURNOUT ---
-      // O predictBurnout espera receber um array genérico,
-      // aqui passamos historyData que atende aos requisitos
-      const prediction = predictBurnout(historyData);
-      setBurnoutAlert(prediction);
-
+      // Se achou dados novos, atualiza a tela E o cache
       if (historyData.length > 0) {
-        const calculatedAvg = Math.round(total / historyData.length);
-        setStats({ avg: calculatedAvg, max, min });
-        setVibeAnalysis(analyzeVibe(calculatedAvg));
-      } else {
-        setStats({ avg: 0, max: 0, min: 0 });
-        setVibeAnalysis(analyzeVibe(0));
+        processData(historyData);
+        // Salva no Cache Local
+        localStorage.setItem(CACHE_KEY, JSON.stringify(historyData));
+      } else if (!cached) {
+        // Se não tem dados nem cache, limpa tudo
+        setData([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao buscar histórico:", error);
+      // 🔥 DICA DE OURO: Verifica se é erro de Índice
+      if (
+        error.code === "failed-precondition" ||
+        error.message?.includes("index")
+      ) {
+        console.log(
+          "⚠️ FALTANDO ÍNDICE NO FIREBASE! OLHE O CONSOLE DO NAVEGADOR PARA O LINK.",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -269,7 +308,7 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </header>
 
-      {/* --- ALERTA DE BURNOUT DA IA --- */}
+      {/* --- ALERTA DE BURNOUT --- */}
       {burnoutAlert && (
         <div className="mx-2 bg-red-50 border border-red-100 p-4 rounded-2xl flex items-start gap-3 animate-pulse shadow-sm">
           <div className="bg-red-100 p-2 rounded-full text-red-500 mt-1">
@@ -277,19 +316,16 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
           </div>
           <div>
             <h4 className="text-red-700 font-bold text-sm flex items-center gap-2">
-              Padrão de Esgotamento Detectado
+              Padrão de Esgotamento
             </h4>
             <p className="text-red-600 text-xs mt-1 leading-relaxed font-medium">
-              {burnoutAlert.message.replace(
-                "terças-feiras",
-                burnoutAlert.day + "s",
-              )}
+              {burnoutAlert.message}
             </p>
           </div>
         </div>
       )}
 
-      {/* VIBE CHECK CARD */}
+      {/* VIBE CHECK */}
       <div className="bg-white p-5 rounded-3xl border border-indigo-50 shadow-sm shadow-indigo-100 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-50 rounded-bl-full -mr-4 -mt-4 opacity-50"></div>
         <div className="flex items-start gap-4 relative z-10">
@@ -309,7 +345,7 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
         </div>
       </div>
 
-      {/* GRID DE STATS */}
+      {/* STATS */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white border border-slate-100 rounded-2xl p-3 flex flex-col items-center justify-center shadow-sm">
           <span className="text-2xl font-black text-indigo-600">
@@ -343,7 +379,6 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
           <Zap size={16} className="text-yellow-500 fill-yellow-500" />
           {timeRange === "day" ? "Oscilação do Dia" : "Histórico de Energia"}
         </h3>
-
         <div style={{ width: "100%", height: 200 }}>
           {data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -401,16 +436,14 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
             <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60">
               <Activity size={32} className="mb-2" />
               <p className="text-xs text-center px-8">
-                {timeRange === "day"
-                  ? "Nada por aqui hoje. Mexe nessa bateria!"
-                  : "Sem dados suficientes para gerar o gráfico."}
+                Mexe na bateria algumas vezes para gerar histórico!
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* GRÁFICO DE PIZZA */}
+      {/* PIZZA */}
       {moodData.length > 0 && (
         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div className="w-1/2 relative h-32">
@@ -436,11 +469,7 @@ export default function InsightsView({ currentUser }: InsightsViewProps) {
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-[10px] font-bold text-slate-400">MOOD</span>
-            </div>
           </div>
-
           <div className="w-1/2 pl-2 space-y-2">
             <h4 className="font-bold text-slate-700 text-xs mb-2 uppercase tracking-wide">
               Distribuição

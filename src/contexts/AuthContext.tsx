@@ -16,11 +16,16 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { auth, googleProvider, db } from "../firebaseConfig";
-import { doc, setDoc, onSnapshot } from "firebase/firestore";
+// 👇 Importante: Adicionei addDoc e collection
+import {
+  doc,
+  setDoc,
+  onSnapshot,
+  addDoc,
+  collection,
+} from "firebase/firestore";
 import { GoogleAuth } from "@codetrix-studio/capacitor-google-auth";
 import { Capacitor } from "@capacitor/core";
-// 👇 Importação Única e Correta das Notificações
-import { PushNotifications } from "@capacitor/push-notifications";
 
 // 1. Definimos a "Cara" do nosso Usuário
 export interface UserData {
@@ -35,7 +40,6 @@ export interface UserData {
   status: string;
   isGhostMode: boolean;
   lastLogin: Date;
-  fcmToken?: string;
 }
 
 interface AuthContextType {
@@ -62,44 +66,6 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // 👇 FUNÇÃO PARA REGISTRAR O CELULAR NAS NOTIFICAÇÕES
-  const registerPushNotifications = async (uid: string) => {
-    // Só tenta registrar se estiver rodando no celular (Android/iOS)
-    if (!Capacitor.isNativePlatform()) return;
-
-    try {
-      let permStatus = await PushNotifications.checkPermissions();
-      if (permStatus.receive === "prompt") {
-        permStatus = await PushNotifications.requestPermissions();
-      }
-
-      if (permStatus.receive !== "granted") {
-        console.log("Permissão de notificação negada!");
-        return;
-      }
-
-      await PushNotifications.register();
-
-      // Quando o celular gerar o "endereço" (Token), salva no Banco
-      PushNotifications.addListener("registration", async (token) => {
-        console.log("Token Push Gerado:", token.value);
-        await setDoc(
-          doc(db, "users", uid),
-          {
-            fcmToken: token.value,
-          },
-          { merge: true },
-        );
-      });
-
-      PushNotifications.addListener("registrationError", (error) => {
-        console.error("Erro ao registrar push:", error);
-      });
-    } catch (error) {
-      console.error("Erro geral no push:", error);
-    }
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -128,13 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   : new Date(),
                 batteryLevel: actualLevel,
                 currentBattery: data.currentBattery,
-                fcmToken: data.fcmToken,
               };
 
               setUser(safeUser);
-
-              // 👇 CHAMA O REGISTRO DE NOTIFICAÇÃO AQUI
-              registerPushNotifications(currentUser.uid);
             } else {
               // Criação de Novo Usuário
               const finalName = currentUser.displayName || "Usuário";
@@ -155,8 +117,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               await setDoc(userRef, newUser);
               setUser(newUser);
-              // 👇 TAMBÉM CHAMA AQUI PARA NOVOS USUÁRIOS
-              registerPushNotifications(currentUser.uid);
             }
             setLoading(false);
           },
@@ -220,8 +180,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // 👇 AQUI ESTAVA O PROBLEMA: Agora salva no histórico também!
   const updateBattery = async (level: number) => {
     if (!user || user.isGhostMode) return;
+
+    // 1. Atualiza o perfil (Para os amigos verem agora)
     await setDoc(
       doc(db, "users", user.uid),
       {
@@ -230,6 +193,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       { merge: true },
     );
+
+    // 2. Cria um registro no histórico (Para o gráfico funcionar)
+    try {
+      await addDoc(collection(db, "battery_logs"), {
+        uid: user.uid,
+        level: level,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error("Erro ao salvar histórico:", error);
+    }
   };
 
   const value = {
