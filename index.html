@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SIA - Sistema Integrado de Auditoria (AM)</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+      :root {
+        --bg-color: #f1f5f9; --sidebar-bg: #0f172a; --sidebar-hover: #1e293b;
+        --card-bg: #ffffff; --text-main: #1e293b; --text-muted: #64748b;
+        --accent: #3b82f6; --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
+        --dark-red: #991b1b; --purple: #9333ea; --cyan: #06b6d4; --border: #e2e8f0;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Inter", sans-serif; }
+      body { display: flex; background-color: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden; }
+
+      .sidebar { width: 260px; background-color: var(--sidebar-bg); color: white; display: flex; flex-direction: column; padding: 20px 0; z-index: 10; overflow-y: auto; }
+      .logo { padding: 0 20px 20px; border-bottom: 1px solid #334155; margin-bottom: 20px; font-weight: 900; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+      .logo i { color: var(--accent); }
+      .nav-item { padding: 12px 20px; display: flex; align-items: center; gap: 12px; color: #cbd5e1; text-decoration: none; transition: 0.3s; font-size: 13px; font-weight: 600; }
+      .nav-item:hover, .nav-item.active { background-color: var(--sidebar-hover); color: white; border-left: 4px solid var(--accent); }
+
+      .btn-pdf { margin: 20px; background: #ef4444; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.3s; box-shadow: 0 4px 6px -1px rgb(239 68 68 / 0.3); }
+      .btn-pdf:hover { background: #dc2626; transform: translateY(-2px); }
+
+      .main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; scroll-behavior: smooth; }
+      .topbar { background-color: var(--card-bg); padding: 20px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+      .topbar h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+      .user-profile { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-muted); }
+      .avatar { width: 40px; height: 40px; background-color: var(--accent); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+
+      .dashboard-container { padding: 30px; }
+      .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }
+      .kpi-card { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
+      .kpi-icon { width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+
+      .icon-blue { background: #eff6ff; color: var(--accent); }
+      .icon-green { background: #ecfdf5; color: var(--success); }
+      .icon-red { background: #fef2f2; color: var(--danger); }
+      .icon-dark-red { background: #fef2f2; color: var(--dark-red); }
+      .icon-purple { background: #faf5ff; color: var(--purple); }
+      .icon-cyan { background: #ecfeff; color: var(--cyan); }
+
+      .kpi-info h3 { font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+      .kpi-info p { font-size: 18px; font-weight: 900; color: var(--text-main); }
+
+      .card { background: var(--card-bg); padding: 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); page-break-inside: avoid; }
+      .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 15px; }
+      .card-header-flex h2 { font-size: 16px; font-weight: 700; color: var(--text-main); text-transform: uppercase; letter-spacing: -0.5px; }
+
+      #teia-conexoes { width: 100%; height: 500px; border-radius: 8px; border: 1px solid #cbd5e1; background-color: #f8fafc; cursor: grab; }
+
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+      th { color: var(--text-muted); font-weight: 700; text-transform: uppercase; font-size: 11px; background-color: #f8fafc; }
+      tr:hover { background-color: #f1f5f9; }
+
+      .badge-danger { background: #fef2f2; color: var(--danger); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; }
+      .badge-warning { background: #fffbeb; color: var(--warning); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; }
+      .badge-purple { background: #f3e8ff; color: var(--purple); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; }
+      .badge-cgu { background: var(--dark-red); color: white; padding: 6px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+      .badge-cyan { background: #ecfeff; color: var(--cyan); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; }
+      
+      .badge-maximo { background: #fef2f2; color: #b91c1c; padding: 6px 10px; border-radius: 6px; font-weight: 800; font-size: 11px; border: 1px solid #f87171;}
+      .badge-alto { background: #fff7ed; color: #c2410c; padding: 6px 10px; border-radius: 6px; font-weight: 800; font-size: 11px; border: 1px solid #fdba74;}
+      .badge-atencao { background: #fefce8; color: #a16207; padding: 6px 10px; border-radius: 6px; font-weight: 800; font-size: 11px; border: 1px solid #fde047;}
+
+      #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; color: var(--accent); font-size: 20px; font-weight: 700; gap: 15px; }
+      .mensagem-vazia { text-align: center; padding: 20px; font-style: italic; color: var(--text-muted); font-size: 14px; }
+
+      .linha-mestre { cursor: pointer; background-color: #ffffff; transition: 0.2s; }
+      .icone-expansao { margin-right: 10px; color: var(--purple); transition: transform 0.3s ease; }
+      .linha-filha { background-color: #faf5ff !important; border-left: 3px solid var(--purple); display: none; }
+    </style>
+  </head>
+  <body>
+    <aside class="sidebar" data-html2canvas-ignore="true">
+      <div class="logo">
+        <i class="fa-solid fa-shield-halved"></i><span>SIA AM</span>
+      </div>
+
+      <button class="btn-pdf" onclick="gerarPDF()">
+        <i class="fa-solid fa-file-pdf"></i> Imprimir Dossiê
+      </button>
+
+      <a href="#" class="nav-item active"><i class="fa-solid fa-chart-pie"></i> Painel Central</a>
+      <a href="#alerta-mestre" class="nav-item" style="color: #ef4444;"><i class="fa-solid fa-crosshairs"></i> Matriz de Risco 2026</a>
+      <a href="#alerta-teia" class="nav-item" style="color: #60a5fa"><i class="fa-solid fa-diagram-project"></i> Grafo Investigativo</a>
+      <a href="#alerta-cnae" class="nav-item" style="color: #06b6d4"><i class="fa-solid fa-store"></i> Desvio CNAE</a>
+      <a href="#alerta-nepotismo" class="nav-item" style="color: #c084fc"><i class="fa-solid fa-people-arrows"></i> Malha Fina UEA</a>
+      <a href="#alerta-cgu" class="nav-item" style="color: #ef4444"><i class="fa-solid fa-ban"></i> Lista Suja CGU</a>
+      <a href="#alerta-risco" class="nav-item" style="color: #fca5a5"><i class="fa-solid fa-triangle-exclamation"></i> Risco Contábil</a>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar" data-html2canvas-ignore="true">
+        <div>
+          <h1>Inteligência Integrada</h1>
+          <span style="color: var(--text-muted); font-size: 14px">Processamento Simultâneo de 7 Bancos de Dados Oficiais</span>
+        </div>
+        <div class="user-profile">
+          <span>João Victor (Auditor)</span>
+          <div class="avatar"><i class="fa-solid fa-user-ninja"></i></div>
+        </div>
+      </header>
+
+      <div id="loading">
+        <i class="fa-solid fa-circle-notch fa-spin fa-2x"></i>
+        <span>Sintetizando Malha Fina...</span>
+      </div>
+
+      <div class="dashboard-container" id="dashboard" style="display: none">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon icon-blue"><i class="fa-solid fa-money-bill-trend-up"></i></div>
+            <div class="kpi-info"><h3>Volume Mapeado</h3><p id="kpi-valor">R$ 0</p></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon icon-cyan"><i class="fa-solid fa-store"></i></div>
+            <div class="kpi-info"><h3 style="color: var(--cyan)">Desvios CNAE</h3><p id="kpi-cnae">0 Atividades</p></div>
+          </div>
+          <div class="kpi-card" style="border-left: 4px solid var(--danger)">
+            <div class="kpi-icon icon-red"><i class="fa-solid fa-skull-crossbones"></i></div>
+            <div class="kpi-info"><h3 style="color: var(--danger)">Risco Contábil Máx</h3><p id="kpi-risco-max">0x Capital</p></div>
+          </div>
+          <div class="kpi-card" style="border-left: 4px solid var(--dark-red); background-color: #fef2f2;">
+            <div class="kpi-icon icon-dark-red"><i class="fa-solid fa-handcuffs"></i></div>
+            <div class="kpi-info"><h3 style="color: var(--dark-red)">Dano CGU</h3><p id="kpi-cgu-valor">R$ 0,00</p></div>
+          </div>
+          <div class="kpi-card" style="border-left: 4px solid var(--purple); background-color: #faf5ff;">
+            <div class="kpi-icon icon-purple"><i class="fa-solid fa-people-arrows"></i></div>
+            <div class="kpi-info"><h3 style="color: var(--purple)">Suspeitos UEA</h3><p id="kpi-nepotismo">0 Pessoas</p></div>
+          </div>
+        </div>
+
+        <div class="card" id="alerta-mestre" style="border: 2px solid #b91c1c; background-color: #fef2f2; box-shadow: 0 4px 6px -1px rgb(185 28 28 / 0.2);">
+            <div class="card-header-flex" style="border-bottom: 1px solid #f87171;">
+                <h2 style="color: #b91c1c; font-size: 18px;"><i class="fa-solid fa-skull-crossbones"></i> ALVOS PRIORITÁRIOS: CONTRATOS ATIVOS EM 2026 COM RED FLAGS</h2>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="tabela-mestre" style="background-color: white; border-radius: 8px; overflow: hidden;">
+                    <thead>
+                        <tr>
+                            <th>Empresa (CNPJ)</th>
+                            <th>Faturamento 2026</th>
+                            <th>Grau de Risco</th>
+                            <th>Detalhes Ocultos Detectados</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div id="msg-sem-mestre" class="mensagem-vazia" style="display: none">Nenhum alvo prioritário detectado nas bases de inteligência.</div>
+            </div>
+        </div>
+
+        <div class="card" id="alerta-teia" style="border: 2px solid var(--accent)">
+          <div class="card-header-flex">
+            <h2 style="color: var(--accent)"><i class="fa-solid fa-diagram-project"></i> Grafo Societário de Alto Escalão (Top 10)</h2>
+          </div>
+          <div id="teia-conexoes"></div>
+        </div>
+
+        <div class="card" id="alerta-cnae" style="border: 2px solid var(--cyan); background-color: #f8fafc">
+          <div class="card-header-flex">
+            <h2 style="color: var(--cyan)"><i class="fa-solid fa-store"></i> Operação Padeiro-Engenheiro: Desvio de CNAE</h2>
+          </div>
+          <div style="overflow-x: auto">
+            <table id="tabela-cnae">
+              <thead><tr><th>CNPJ</th><th>Razão Social</th><th>Atividade Registrada (CNAE)</th><th>Total Recebido</th><th style="text-align: right">Auditoria</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="msg-sem-cnae" class="mensagem-vazia" style="display: none">Sem desvios de atividade registrados.</div>
+          </div>
+        </div>
+
+        <div class="card" id="alerta-nepotismo" style="border: 2px solid var(--purple); background-color: #faf5ff">
+          <div class="card-header-flex">
+            <h2 style="color: var(--purple)"><i class="fa-solid fa-people-arrows"></i> Malha Fina: Folha de Pagamento UEA x Fornecedores</h2>
+          </div>
+          <div style="overflow-x: auto">
+            <table id="tabela-nepotismo">
+              <thead><tr><th>Família / Dono da Empresa</th><th>Servidor Encontrado</th><th>Cargo e Lotação</th><th style="text-align: right">Nível de Risco</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="msg-sem-nepotismo" class="mensagem-vazia" style="display: none">Nenhum cruzamento suspeito na UEA.</div>
+          </div>
+        </div>
+
+        <div class="card" id="alerta-cgu" style="border: 2px solid var(--dark-red); background-color: #fff5f5">
+          <div class="card-header-flex">
+            <h2 style="color: var(--dark-red)"><i class="fa-solid fa-ban"></i> CEIS (CGU) - Cadastro de Empresas Proibidas</h2>
+          </div>
+          <div style="overflow-x: auto">
+            <table id="tabela-cgu">
+              <thead><tr><th>CNPJ Inidôneo</th><th>Órgão Sancionador</th><th>Motivo Legal</th><th style="text-align: right">Valor Recebido</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="msg-sem-cgu" class="mensagem-vazia" style="display: none">Nenhuma empresa na Lista Suja da CGU.</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px;">
+          <div class="card" id="alerta-risco" style="border: 2px solid var(--danger); background-color: #fffbfa; margin-bottom: 0;">
+            <div class="card-header-flex">
+              <h2 style="color: var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i> Risco Contábil</h2>
+            </div>
+            <div style="overflow-x: auto">
+              <table id="tabela-risco">
+                <thead><tr><th>CNPJ</th><th>Capital Social</th><th>Contrato</th><th style="text-align: right">Multiplicador</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" id="alerta-cartel" style="border: 2px solid var(--warning); background-color: #fffbeb; margin-bottom: 0;">
+            <div class="card-header-flex">
+              <h2 style="color: var(--warning)"><i class="fa-solid fa-map-location-dot"></i> Compartilhamento de Endereço</h2>
+            </div>
+            <div style="overflow-x: auto">
+              <table id="tabela-cartel">
+                <thead><tr><th style="text-align: center">Qtd</th><th>Endereço Detectado</th></tr></thead>
+                <tbody></tbody>
+              </table>
+              <div id="msg-sem-cartel" class="mensagem-vazia" style="display: none">Nenhum endereço duplicado detectado.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      function toNumber(str) { return parseFloat(String(str).replace("R$ ", "").replace(/\./g, "").replace(",", ".")); }
+
+      function gerarPDF() {
+        const elemento = document.getElementById("dashboard");
+        const opt = {
+          margin: [0.5, 0.5, 0.5, 0.5],
+          filename: "DOSSIE_SIA_AMAZONAS.pdf",
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: "in", format: "a3", orientation: "portrait" },
+        };
+        const btn = document.querySelector(".btn-pdf");
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Gerando Documento...';
+        html2pdf().set(opt).from(elemento).save().then(() => {
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Dossiê Salvo!';
+            setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Imprimir Dossiê'; }, 3000);
+        });
+      }
+
+      function toggleFamilia(idGrupo) {
+        const linhas = document.querySelectorAll(".grupo-" + idGrupo);
+        const icone = document.getElementById("icone-" + idGrupo);
+        if (linhas[0].style.display === "none") {
+          linhas.forEach((l) => (l.style.display = "table-row"));
+          icone.style.transform = "rotate(90deg)";
+        } else {
+          linhas.forEach((l) => (l.style.display = "none"));
+          icone.style.transform = "rotate(0deg)";
+        }
+      }
+
+      function safeLoad(file, delimitador, callback) {
+        Papa.parse(file, {
+          download: true, header: true, skipEmptyLines: true, delimiter: delimitador,
+          complete: function (results) { callback(results.data); },
+          error: function () { callback([]); },
+        });
+      }
+
+      function initApp() {
+        // Carrega o Dossiê Integrado primeiro e depois entra no loop das outras bases!
+        safeLoad("DOSSIE_INTEGRADO_2026.csv", ";", function(dadosMestre) {
+            safeLoad("RANKING_SOCIOS_AM_2026.csv", ",", function (dadosSocios) {
+            safeLoad("RELATORIO_RISCO_AM.csv", ",", function (dadosRisco) {
+            safeLoad("ALERTA_CGU_AM.csv", ",", function (dadosCGU) {
+            safeLoad("ALERTA_ENDERECOS_AM.csv", ",", function (dadosCartel) {
+            safeLoad("ALERTA_UEA_AM.csv", ";", function (dadosUEA) {
+            safeLoad("ALERTA_CNAE_AM.csv", ";", function (dadosCNAE) {
+                
+                // 0. PROCESSA MATRIZ MESTRE (A NOVIDADE)
+                if (dadosMestre.length > 0 && dadosMestre[0].CNPJ) {
+                    const tbMestre = document.querySelector("#tabela-mestre tbody");
+                    dadosMestre.forEach(item => {
+                        if(!item.CNPJ) return;
+                        let badgeClass = "badge-atencao";
+                        if(String(item.Nivel).includes("MÁXIMO")) badgeClass = "badge-maximo";
+                        else if(String(item.Nivel).includes("ALTO")) badgeClass = "badge-alto";
+                        
+                        let detalhesHtml = String(item.Detalhes_Ocultos).split(' | ').map(d => `<div style="margin-bottom: 4px;"><i class="fa-solid fa-circle-exclamation" style="color: #ef4444; font-size: 10px; margin-right: 5px;"></i>${d}</div>`).join('');
+
+                        tbMestre.innerHTML += `
+                            <tr>
+                                <td><strong style="color: var(--text-main); display: block;">${item.Empresa}</strong><span style="font-size: 11px; color: var(--text-muted);">${item.CNPJ}</span></td>
+                                <td style="font-weight: 800; color: var(--success); font-size: 14px;">${item.Faturamento_2026}</td>
+                                <td><span class="${badgeClass}">${item.Nivel}</span></td>
+                                <td style="font-size: 12px; color: #475569; max-width: 400px;">${detalhesHtml}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    document.getElementById("msg-sem-mestre").style.display = "block";
+                    document.getElementById("tabela-mestre").style.display = "none";
+                }
+
+                // 1. PROCESSA SÓCIOS E TEIA
+                if (dadosSocios.length > 0) {
+                  let totalDinheiro = 0; let nodesArray = []; let edgesArray = [];
+                  nodesArray.push({ id: "gov", label: "Cofre Público\n(Governo AM)", shape: "database", color: "#10b981", font: { color: "white", size: 16, face: "Inter" }, size: 40 });
+                  dadosSocios.slice(0, 10).forEach((socio, index) => {
+                    if (!socio.Nome_do_Socio) return;
+                    let idSocio = "socio_" + index;
+                    let val = toNumber(socio.Total_Arrecadado);
+                    totalDinheiro += val;
+                    nodesArray.push({ id: idSocio, label: socio.Nome_do_Socio.split(" ").slice(0, 2).join("\n"), shape: "box", color: "#3b82f6", font: { color: "white", size: 12 }, margin: 10 });
+                    edgesArray.push({ from: "gov", to: idSocio, value: Math.max(1, val / 1000000), title: socio.Total_Arrecadado, color: { color: "#cbd5e1" } });
+                  });
+                  document.getElementById("kpi-valor").innerText = totalDinheiro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                  new vis.Network(document.getElementById("teia-conexoes"), { nodes: nodesArray, edges: edgesArray }, { physics: { stabilization: false } });
+                }
+
+                // 2. PROCESSA RISCO CONTÁBIL
+                if (dadosRisco.length > 0) {
+                  const tbRisco = document.querySelector("#tabela-risco tbody");
+                  dadosRisco.slice(0, 10).forEach((item) => {
+                    if (!item.CNPJ_Vencedor) return;
+                    tbRisco.innerHTML += `<tr><td style="font-weight: 600;">${item.CNPJ_Vencedor}</td><td>${item.Capital_Social}</td><td style="font-weight: 700;">${item.Total_Ganho_Governo}</td><td style="text-align: right;"><span class="badge-danger">${item.Multiplicador_Risco}</span></td></tr>`;
+                  });
+                  if (dadosRisco[0]) document.getElementById("kpi-risco-max").innerText = dadosRisco[0].Multiplicador_Risco || "0x";
+                }
+
+                // 3. PROCESSA CGU (LISTA SUJA)
+                if (dadosCGU.length > 0 && dadosCGU[0].CNPJ_Vencedor) {
+                  let totalCgu = 0;
+                  const tbCgu = document.querySelector("#tabela-cgu tbody");
+                  dadosCGU.forEach((item) => {
+                    if (!item.Valor_Recebido_Indevidamente) return;
+                    totalCgu += toNumber(item.Valor_Recebido_Indevidamente);
+                    tbCgu.innerHTML += `<tr><td style="font-weight: 900; color: var(--dark-red);">${item.CNPJ_Vencedor}</td><td style="font-weight: 600;">${item.Orgao_Sancionador}</td><td>${item.Motivo}</td><td style="text-align: right;"><span class="badge-cgu">${item.Valor_Recebido_Indevidamente}</span></td></tr>`;
+                  });
+                  document.getElementById("kpi-cgu-valor").innerText = totalCgu.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                } else {
+                  document.getElementById("msg-sem-cgu").style.display = "block";
+                  document.getElementById("tabela-cgu").style.display = "none";
+                }
+
+                // 4. PROCESSA CARTEL (ENDEREÇOS)
+                if (dadosCartel.length > 0 && dadosCartel[0].Endereco_Completo) {
+                  const tbCartel = document.querySelector("#tabela-cartel tbody");
+                  dadosCartel.slice(0, 8).forEach((item) => {
+                    if (!item.Endereco_Completo) return;
+                    tbCartel.innerHTML += `<tr><td style="text-align: center;"><span class="badge-warning">${item.Qtd_Empresas_No_Local}x</span></td><td style="font-size: 11px;">${item.Endereco_Completo}</td></tr>`;
+                  });
+                } else {
+                  document.getElementById("msg-sem-cartel").style.display = "block";
+                  document.getElementById("tabela-cartel").style.display = "none";
+                }
+
+                // 5. PROCESSA MALHA FINA UEA
+                if (dadosUEA.length > 0 && dadosUEA[0].Dono_da_Empresa) {
+                  let totalCasos = 0; let familias = {};
+                  dadosUEA.forEach((item) => {
+                    if (!item.Dono_da_Empresa) return;
+                    totalCasos++;
+                    if (!familias[item.Dono_da_Empresa]) familias[item.Dono_da_Empresa] = [];
+                    familias[item.Dono_da_Empresa].push(item);
+                  });
+                  document.getElementById("kpi-nepotismo").innerText = `${totalCasos} Casos`;
+
+                  const tbUea = document.querySelector("#tabela-nepotismo tbody");
+                  let idGrp = 0;
+                  for (let socio in familias) {
+                    let parentes = familias[socio];
+                    tbUea.innerHTML += `<tr class="linha-mestre" onclick="toggleFamilia(${idGrp})">
+                        <td style="font-weight: 700; color: #1e293b;"><i class="fa-solid fa-chevron-right icone-expansao" id="icone-${idGrp}"></i>${socio}</td>
+                        <td colspan="2"><span class="badge-purple">${parentes.length} Registros Ocultos</span></td>
+                        <td style="text-align: right; color: var(--purple); font-size: 11px;">CLIQUE PARA VER <i class="fa-solid fa-hand-pointer"></i></td>
+                    </tr>`;
+                    parentes.forEach((p) => {
+                      let bColor = String(p.Nivel_Risco).includes("GRAVE") ? "badge-danger" : "badge-warning";
+                      tbUea.innerHTML += `<tr class="linha-filha grupo-${idGrp}">
+                            <td style="padding-left: 35px;"><i class="fa-solid fa-turn-up fa-rotate-90" style="color:#94a3b8;"></i></td>
+                            <td style="font-weight: 600;">${p.Servidor_UEA}</td>
+                            <td><span style="font-size: 11px; color: #64748b; display: block;">${p.Cargo}</span>${p.Lotacao}</td>
+                            <td style="text-align: right;"><span class="${bColor}">${p.Nivel_Risco}</span></td>
+                        </tr>`;
+                    });
+                    idGrp++;
+                  }
+                } else {
+                  document.getElementById("msg-sem-nepotismo").style.display = "block";
+                  document.getElementById("tabela-nepotismo").style.display = "none";
+                }
+
+                // 6. PROCESSA DESVIO CNAE
+                if (dadosCNAE.length > 0 && dadosCNAE[0].CNPJ) {
+                  let cnaeCriticos = 0;
+                  const tbCnae = document.querySelector("#tabela-cnae tbody");
+                  dadosCNAE.forEach((item) => {
+                    if (!item.CNPJ) return;
+                    if (String(item.Nivel_de_Risco).includes("CRÍTICO")) {
+                      cnaeCriticos++;
+                      tbCnae.innerHTML += `<tr>
+                            <td style="font-weight: 700;">${item.CNPJ}</td>
+                            <td style="font-size: 11px; color: #475569;">${item.Razao_Social}</td>
+                            <td style="font-weight: 600;">${item.CNAE_Registrado}</td>
+                            <td style="font-weight: 700; color: var(--cyan);">${item.Total_Recebido}</td>
+                            <td style="text-align: right;"><span class="badge-danger">${item.Nivel_de_Risco}</span></td>
+                        </tr>`;
+                    }
+                  });
+                  document.getElementById("kpi-cnae").innerText = `${cnaeCriticos} Alertas`;
+                  if (cnaeCriticos === 0) {
+                    document.getElementById("msg-sem-cnae").style.display = "block";
+                    document.getElementById("tabela-cnae").style.display = "none";
+                  }
+                } else {
+                  document.getElementById("msg-sem-cnae").style.display = "block";
+                  document.getElementById("tabela-cnae").style.display = "none";
+                }
+
+                // LIBERA A TELA FINAL
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("dashboard").style.display = "block";
+
+            }); }); }); }); }); });
+        });
+      }
+      initApp();
+    </script>
+  </body>
+</html>
