@@ -279,13 +279,13 @@
 
       function initApp() {
         // Carrega o Dossiê Integrado primeiro e depois entra no loop das outras bases!
-        safeLoad("DOSSIE_INTEGRADO_2026.csv", ";", function(dadosMestre) {
-            safeLoad("RANKING_SOCIOS_AM_2026.csv", ",", function (dadosSocios) {
-            safeLoad("RELATORIO_RISCO_AM.csv", ",", function (dadosRisco) {
-            safeLoad("ALERTA_CGU_AM.csv", ",", function (dadosCGU) {
-            safeLoad("ALERTA_ENDERECOS_AM.csv", ",", function (dadosCartel) {
-            safeLoad("ALERTA_UEA_AM.csv", ";", function (dadosUEA) {
-            safeLoad("ALERTA_CNAE_AM.csv", ";", function (dadosCNAE) {
+        safeLoad("../dados/DOSSIE_INTEGRADO_2026.csv", ";", function(dadosMestre) {
+            safeLoad("../dados/RANKING_SOCIOS_AM_2026.csv", ",", function (dadosSocios) {
+            safeLoad("../dados/RELATORIO_RISCO_AM.csv", ",", function (dadosRisco) {
+            safeLoad("../dados/ALERTA_CGU_AM.csv", ",", function (dadosCGU) {
+            safeLoad("../dados/ALERTA_ENDERECOS_AM.csv", ",", function (dadosCartel) {
+            safeLoad("../dados/ALERTA_UEA_AM.csv", ";", function (dadosUEA) {
+            safeLoad("../dados/ALERTA_CNAE_AM.csv", ";", function (dadosCNAE) {
                 
                 // 0. PROCESSA MATRIZ MESTRE (A NOVIDADE)
                 if (dadosMestre.length > 0 && dadosMestre[0].CNPJ) {
